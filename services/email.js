@@ -68,7 +68,7 @@ export async function sendLeadNotification({
     `;
 
     const { data, error } = await resend.emails.send({
-      from: 'AutaiChat Notifications <notifications@shootsync.co.uk>',
+      from: 'Auto Reply Chat <notifications@autoreplychat.com>',
       to: [businessEmail],
       subject: `New Lead: ${leadName}`,
       html: emailHtml,
