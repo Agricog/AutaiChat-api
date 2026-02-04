@@ -20,7 +20,7 @@
     "axios": "^1.6.0",
     "cheerio": "^1.0.0-rc.12",
     "youtube-transcript": "^1.2.1",
-    "yt-dlp-wrap": "^2.3.8",
+    "youtube-dl-exec": "^2.4.17",
     "assemblyai": "^4.0.0"
   }
 }
