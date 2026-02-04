@@ -105,57 +105,5 @@ export async function initializeDatabase() {
     throw error;
   }
 }
-    
-    // Create documents table
-    await query(`
-      CREATE TABLE IF NOT EXISTS documents (
-        id SERIAL PRIMARY KEY,
-        customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
-        title VARCHAR(500),
-        content_type VARCHAR(50),
-        source_url TEXT,
-        content TEXT,
-        metadata JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    // Create embeddings table
-    await query(`
-      CREATE TABLE IF NOT EXISTS embeddings (
-        id SERIAL PRIMARY KEY,
-        customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
-        document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
-        chunk_text TEXT NOT NULL,
-        embedding vector(1536),
-        metadata JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    // Create leads table
-    await query(`
-      CREATE TABLE IF NOT EXISTS leads (
-        id SERIAL PRIMARY KEY,
-        customer_id INTEGER REFERENCES customers(id) ON DELETE CASCADE,
-        name VARCHAR(255) NOT NULL,
-        email VARCHAR(255) NOT NULL,
-        conversation JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-    
-    // Create indexes
-    await query('CREATE INDEX IF NOT EXISTS embeddings_customer_idx ON embeddings(customer_id)');
-    await query('CREATE INDEX IF NOT EXISTS embeddings_vector_idx ON embeddings USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100)');
-    await query('CREATE INDEX IF NOT EXISTS documents_customer_idx ON documents(customer_id)');
-    await query('CREATE INDEX IF NOT EXISTS leads_customer_idx ON leads(customer_id)');
-    
-    console.log('✓ Database schema initialized successfully');
-  } catch (error) {
-    console.error('Failed to initialize database:', error);
-    throw error;
-  }
-}
 
 export default pool;
