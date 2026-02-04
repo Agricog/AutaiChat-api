@@ -78,7 +78,9 @@ export async function extractLinks(url) {
         
         // Only include links from the same domain
         if (absoluteUrl.hostname === baseUrl.hostname) {
-          links.push(absoluteUrl.href);
+          // Filter out anchors, duplicates with different fragments
+          const cleanUrl = absoluteUrl.origin + absoluteUrl.pathname;
+          links.push(cleanUrl);
         }
       } catch (e) {
         // Invalid URL, skip it
@@ -95,10 +97,12 @@ export async function extractLinks(url) {
 }
 
 // Crawl multiple pages from a website (limited to prevent abuse)
-export async function crawlWebsite(startUrl, maxPages = 5) {
+export async function crawlWebsite(startUrl, maxPages = 20) {
   const results = [];
   const visited = new Set();
   const toVisit = [startUrl];
+
+  console.log(`[Crawler] Starting crawl from ${startUrl} (max ${maxPages} pages)`);
 
   while (toVisit.length > 0 && results.length < maxPages) {
     const url = toVisit.shift();
@@ -106,21 +110,27 @@ export async function crawlWebsite(startUrl, maxPages = 5) {
     if (visited.has(url)) continue;
     visited.add(url);
 
+    console.log(`[Crawler] Scraping page ${results.length + 1}/${maxPages}: ${url}`);
+
     try {
       const pageData = await scrapeWebpage(url);
       results.push(pageData);
 
-      // Get links from this page for crawling (optional - disabled by default for safety)
-      // const links = await extractLinks(url);
-      // toVisit.push(...links.filter(link => !visited.has(link)));
+      // Get links from this page for crawling
+      const links = await extractLinks(url);
+      console.log(`[Crawler] Found ${links.length} links on ${url}`);
+      
+      // Add new links to queue
+      toVisit.push(...links.filter(link => !visited.has(link)));
 
     } catch (error) {
-      console.error(`Failed to scrape ${url}:`, error.message);
+      console.error(`[Crawler] Failed to scrape ${url}:`, error.message);
     }
 
     // Small delay to be respectful to the server
     await new Promise(resolve => setTimeout(resolve, 500));
   }
 
+  console.log(`[Crawler] Crawl complete. Scraped ${results.length} pages.`);
   return results;
 }
