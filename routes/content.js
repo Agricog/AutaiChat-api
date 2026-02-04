@@ -1,8 +1,62 @@
 import express from 'express';
 import { storeDocument } from '../services/rag.js';
 import { query } from '../db/database.js';
+import { upload, extractTextFromFile, cleanupFile } from '../services/fileUpload.js';
 
 const router = express.Router();
+
+// POST /api/content/upload - Upload file (PDF, Word, TXT)
+router.post('/upload', upload.single('file'), async (req, res) => {
+  try {
+    const { customerId } = req.body;
+    const file = req.file;
+
+    if (!customerId || !file) {
+      return res.status(400).json({ error: 'customerId and file are required' });
+    }
+
+    // Extract text from file
+    const text = await extractTextFromFile(file.path, file.mimetype);
+
+    // Store in database
+    const result = await storeDocument({
+      customerId: parseInt(customerId),
+      title: file.originalname,
+      contentType: file.mimetype.includes('pdf') ? 'pdf' : 
+                   file.mimetype.includes('word') ? 'docx' : 'text',
+      sourceUrl: file.originalname,
+      content: text,
+      metadata: {
+        uploadedAt: new Date().toISOString(),
+        filename: file.originalname,
+        fileSize: file.size,
+        mimetype: file.mimetype
+      }
+    });
+
+    // Clean up uploaded file
+    cleanupFile(file.path);
+
+    res.json({
+      success: true,
+      message: 'File uploaded successfully',
+      ...result
+    });
+
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    
+    // Clean up file on error
+    if (req.file) {
+      cleanupFile(req.file.path);
+    }
+    
+    res.status(500).json({ 
+      error: 'Failed to upload file',
+      details: error.message 
+    });
+  }
+});
 
 // POST /api/content/text - Upload plain text content
 router.post('/text', async (req, res) => {
@@ -43,12 +97,11 @@ router.post('/website', async (req, res) => {
       return res.status(400).json({ error: 'customerId and url are required' });
     }
 
-    // TODO: Implement web scraping (use Cheerio or Playwright)
-    // For now, return placeholder
+    // TODO: Implement web scraping (next step)
     res.json({
       success: false,
-      message: 'Website scraping not yet implemented',
-      note: 'Coming in next iteration'
+      message: 'Website scraping coming soon',
+      note: 'Will be implemented next'
     });
 
   } catch (error) {
@@ -66,86 +119,16 @@ router.post('/youtube', async (req, res) => {
       return res.status(400).json({ error: 'customerId and videoUrl are required' });
     }
 
-    // TODO: Implement YouTube transcript extraction
-    // For now, return placeholder
+    // TODO: Implement YouTube transcript extraction (next step)
     res.json({
       success: false,
-      message: 'YouTube transcript extraction not yet implemented',
-      note: 'Coming in next iteration'
+      message: 'YouTube transcript extraction coming soon',
+      note: 'Will be implemented next'
     });
 
   } catch (error) {
     console.error('Error extracting YouTube transcript:', error);
     res.status(500).json({ error: 'Failed to extract transcript' });
-  }
-});
-
-// POST /api/content/pdf - Upload PDF content
-router.post('/pdf', async (req, res) => {
-  try {
-    const { customerId, title, content } = req.body;
-
-    if (!customerId || !content) {
-      return res.status(400).json({ error: 'customerId and content are required' });
-    }
-
-    // Content should be pre-extracted text from PDF (done client-side or via separate service)
-    const result = await storeDocument({
-      customerId,
-      title: title || 'PDF Document',
-      contentType: 'pdf',
-      sourceUrl: null,
-      content,
-      metadata: { uploadedAt: new Date().toISOString() }
-    });
-
-    res.json({
-      success: true,
-      message: 'PDF content uploaded successfully',
-      ...result
-    });
-
-  } catch (error) {
-    console.error('Error uploading PDF content:', error);
-    res.status(500).json({ error: 'Failed to upload PDF' });
-  }
-});
-
-// POST /api/content/qa - Upload Q&A pairs
-router.post('/qa', async (req, res) => {
-  try {
-    const { customerId, title, qaList } = req.body;
-
-    if (!customerId || !qaList || !Array.isArray(qaList)) {
-      return res.status(400).json({ error: 'customerId and qaList (array) are required' });
-    }
-
-    // Format Q&A pairs into text
-    const content = qaList.map(qa => 
-      `Q: ${qa.question}\nA: ${qa.answer}`
-    ).join('\n\n');
-
-    const result = await storeDocument({
-      customerId,
-      title: title || 'Q&A Document',
-      contentType: 'qa',
-      sourceUrl: null,
-      content,
-      metadata: { 
-        uploadedAt: new Date().toISOString(),
-        qaCount: qaList.length
-      }
-    });
-
-    res.json({
-      success: true,
-      message: 'Q&A content uploaded successfully',
-      ...result
-    });
-
-  } catch (error) {
-    console.error('Error uploading Q&A content:', error);
-    res.status(500).json({ error: 'Failed to upload Q&A' });
   }
 });
 
