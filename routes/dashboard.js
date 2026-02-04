@@ -132,6 +132,18 @@ router.get('/:customerId', async (req, res) => {
 
             <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
 
+            <!-- YouTube Section -->
+            <div class="upload-section">
+              <h3 style="margin-bottom: 10px;">Train from YouTube</h3>
+              <p style="color: #6b7280; font-size: 14px; margin-bottom: 15px;">Extract transcript from any YouTube video with captions.</p>
+              
+              <input type="text" id="youtube-url" placeholder="https://www.youtube.com/watch?v=..." />
+              <button onclick="extractYouTube()" id="youtubeBtn">Extract Transcript</button>
+              <div id="youtube-result"></div>
+            </div>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+
             <!-- Text Upload Section -->
             <div class="upload-section">
               <h3 style="margin-bottom: 10px;">Or Paste Text</h3>
@@ -324,6 +336,46 @@ Examples:
             result.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
           } finally {
             scrapeBtn.disabled = false;
+          }
+        }
+
+        // Extract YouTube transcript
+        async function extractYouTube() {
+          const url = document.getElementById('youtube-url').value;
+          const result = document.getElementById('youtube-result');
+          const youtubeBtn = document.getElementById('youtubeBtn');
+
+          if (!url.trim()) {
+            result.innerHTML = '<div class="error">Please enter a YouTube URL</div>';
+            return;
+          }
+
+          result.innerHTML = '<div style="color: #6b7280; margin-top: 10px;">🔄 Extracting transcript...</div>';
+          youtubeBtn.disabled = true;
+
+          try {
+            const response = await fetch('/api/content/youtube', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customerId: customerId,
+                videoUrl: url
+              })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+              result.innerHTML = '<div class="success">✓ Transcript extracted! ' + data.wordCount + ' words, ' + data.chunksStored + ' chunks stored.</div>';
+              document.getElementById('youtube-url').value = '';
+              loadStats();
+            } else {
+              result.innerHTML = '<div class="error">Error: ' + (data.error || data.details || 'Extraction failed') + '</div>';
+            }
+          } catch (error) {
+            result.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+          } finally {
+            youtubeBtn.disabled = false;
           }
         }
 
