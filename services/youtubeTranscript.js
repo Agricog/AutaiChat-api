@@ -30,7 +30,7 @@ export async function getYoutubeTranscript(videoUrl) {
 
     const transcript = await client.transcripts.transcribe({
       audio: fullUrl,
-      speech_model: 'universal-2'
+      speech_models: ['universal-2']
     });
 
     if (transcript.status === 'error') {
