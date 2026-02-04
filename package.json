@@ -18,9 +18,11 @@
     "pdf-parse": "^1.1.1",
     "mammoth": "^1.6.0",
     "axios": "^1.6.0",
-    "cheerio": "^1.0.0-rc.12",
-    "youtube-transcript": "^1.2.1",
-    "youtube-dl-exec": "^2.4.17",
-    "assemblyai": "^4.0.0"
+    "cheerio": "^1.0.0-rc.12"
   }
 }
+```
+
+**3. Add to Railway Variables:**
+```
+TRANSCRIPT_API_KEY=your-key-here
