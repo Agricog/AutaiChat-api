@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import chatRoutes from './routes/chat.js';
+import { initializeDatabase } from './db/database.js';
 
 dotenv.config();
 
@@ -33,6 +34,20 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`API server running on port ${PORT}`);
-});
+// Initialize database and start server
+async function startServer() {
+  try {
+    // Initialize database schema
+    await initializeDatabase();
+    
+    // Start server
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`API server running on port ${PORT}`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exit(1);
+  }
+}
+
+startServer();
