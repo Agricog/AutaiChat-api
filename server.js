@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import chatRoutes from './routes/chat.js';
+import contentRoutes from './routes/content.js';
 import { initializeDatabase } from './db/database.js';
 
 dotenv.config();
@@ -18,7 +19,7 @@ app.use(cors({
   ],
   credentials: true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' })); // Increased limit for document uploads
 
 // Health check
 app.get('/health', (req, res) => {
@@ -27,6 +28,7 @@ app.get('/health', (req, res) => {
 
 // Routes
 app.use('/api', chatRoutes);
+app.use('/api/content', contentRoutes);
 
 // Error handling
 app.use((err, req, res, next) => {
