@@ -102,6 +102,17 @@ router.get('/:customerId', async (req, res) => {
 
             <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
 
+            <!-- Website Scraping Section -->
+            <div class="upload-section">
+              <h3 style="margin-bottom: 10px;">Scrape Website</h3>
+              <p style="color: #6b7280; font-size: 14px; margin-bottom: 10px;">Enter a website URL to extract and train your chatbot on the content.</p>
+              <input type="text" id="website-url" placeholder="https://example.com/page" />
+              <button onclick="scrapeWebsite()" id="scrapeBtn">Scrape Website</button>
+              <div id="scrape-result"></div>
+            </div>
+
+            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+
             <!-- Text Upload Section -->
             <div class="upload-section">
               <h3 style="margin-bottom: 10px;">Or Paste Text</h3>
@@ -226,6 +237,54 @@ Examples:
             result.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
           } finally {
             uploadFileBtn.disabled = false;
+          }
+        }
+
+        // Scrape website
+        async function scrapeWebsite() {
+          const url = document.getElementById('website-url').value;
+          const result = document.getElementById('scrape-result');
+          const scrapeBtn = document.getElementById('scrapeBtn');
+
+          if (!url.trim()) {
+            result.innerHTML = '<div class="error">Please enter a website URL</div>';
+            return;
+          }
+
+          // Validate URL format
+          try {
+            new URL(url);
+          } catch (e) {
+            result.innerHTML = '<div class="error">Please enter a valid URL (e.g., https://example.com)</div>';
+            return;
+          }
+
+          result.innerHTML = '<div style="color: #6b7280; margin-top: 10px;">Scraping website... This may take a few seconds.</div>';
+          scrapeBtn.disabled = true;
+
+          try {
+            const response = await fetch('/api/content/website', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                customerId: customerId,
+                url: url
+              })
+            });
+
+            const data = await response.json();
+
+            if (data.success) {
+              result.innerHTML = '<div class="success">✓ Website scraped! ' + data.chunksStored + ' chunks stored from "' + data.title + '" (' + data.wordCount + ' words)</div>';
+              document.getElementById('website-url').value = '';
+              loadStats();
+            } else {
+              result.innerHTML = '<div class="error">Error: ' + (data.error || data.details || 'Scraping failed') + '</div>';
+            }
+          } catch (error) {
+            result.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
+          } finally {
+            scrapeBtn.disabled = false;
           }
         }
 
