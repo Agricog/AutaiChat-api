@@ -1,14 +1,22 @@
+import YTDlpWrap from 'yt-dlp-wrap';
 import { AssemblyAI } from 'assemblyai';
+import { YoutubeTranscript } from 'youtube-transcript';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 
-const client = new AssemblyAI({
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const assemblyClient = new AssemblyAI({
   apiKey: process.env.ASSEMBLYAI_API_KEY
 });
 
-// Extract video ID from various YouTube URL formats
+// Extract video ID
 function extractVideoId(url) {
   const patterns = [
     /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([^&\n?#]+)/,
-    /^([a-zA-Z0-9_-]{11})$/ // Direct video ID
+    /^([a-zA-Z0-9_-]{11})$/
   ];
 
   for (const pattern of patterns) {
@@ -19,17 +27,65 @@ function extractVideoId(url) {
   throw new Error('Invalid YouTube URL format');
 }
 
-// Transcribe YouTube video using AssemblyAI
-export async function getYoutubeTranscript(videoUrl) {
+// Try to get free captions first
+async function tryGetCaptions(videoId) {
   try {
-    const videoId = extractVideoId(videoUrl);
-    const fullUrl = videoUrl.includes('youtube.com') ? videoUrl : `https://www.youtube.com/watch?v=${videoId}`;
-    
-    console.log(`[YouTube] Transcribing video: ${videoId}`);
-    console.log(`[YouTube] This may take 30-90 seconds depending on video length...`);
+    console.log('[YouTube] Attempting to fetch free captions...');
+    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
 
-    const transcript = await client.transcripts.transcribe({
-      audio: fullUrl,
+    if (transcript && transcript.length > 0) {
+      const fullText = transcript
+        .map(segment => segment.text)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      console.log(`[YouTube] ✓ Captions found: ${fullText.split(' ').length} words`);
+      return {
+        text: fullText,
+        method: 'captions',
+        wordCount: fullText.split(/\s+/).length
+      };
+    }
+  } catch (error) {
+    console.log('[YouTube] Captions not available, will download audio...');
+  }
+  return null;
+}
+
+// Download audio and transcribe with AssemblyAI
+async function downloadAndTranscribe(videoId) {
+  const tempDir = path.join(__dirname, '..', 'temp');
+  if (!fs.existsSync(tempDir)) {
+    fs.mkdirSync(tempDir, { recursive: true });
+  }
+
+  const audioPath = path.join(tempDir, `${videoId}.mp3`);
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+  try {
+    console.log('[YouTube] Downloading audio with yt-dlp...');
+    
+    const ytDlpWrap = new YTDlpWrap();
+    
+    // Download audio only
+    await ytDlpWrap.execPromise([
+      videoUrl,
+      '-x',  // Extract audio
+      '--audio-format', 'mp3',
+      '--audio-quality', '5',  // Lower quality = smaller file
+      '-o', audioPath,
+      '--no-playlist'
+    ]);
+
+    console.log('[YouTube] Audio downloaded, transcribing with AssemblyAI...');
+
+    // Upload to AssemblyAI
+    const uploadUrl = await assemblyClient.files.upload(audioPath);
+
+    // Transcribe
+    const transcript = await assemblyClient.transcripts.transcribe({
+      audio: uploadUrl,
       speech_models: ['universal-2']
     });
 
@@ -37,23 +93,51 @@ export async function getYoutubeTranscript(videoUrl) {
       throw new Error(transcript.error);
     }
 
+    // Cleanup
+    if (fs.existsSync(audioPath)) {
+      fs.unlinkSync(audioPath);
+    }
+
     console.log(`[YouTube] ✓ Transcription complete: ${transcript.words.length} words`);
 
     return {
-      videoId,
       text: transcript.text,
+      method: 'yt-dlp + assemblyai',
       wordCount: transcript.words.length,
-      method: 'assemblyai',
       duration: transcript.audio_duration
     };
 
   } catch (error) {
-    console.error('[YouTube] Error:', error.message);
-    throw new Error(`Failed to transcribe video: ${error.message}`);
+    // Cleanup on error
+    if (fs.existsSync(audioPath)) {
+      fs.unlinkSync(audioPath);
+    }
+    throw error;
   }
 }
 
-// Get video metadata
+// Main function
+export async function getYoutubeTranscript(videoUrl) {
+  try {
+    const videoId = extractVideoId(videoUrl);
+    console.log(`[YouTube] Processing video: ${videoId}`);
+
+    // STEP 1: Try free captions first
+    const captionResult = await tryGetCaptions(videoId);
+    if (captionResult) {
+      return { videoId, ...captionResult };
+    }
+
+    // STEP 2: Download and transcribe
+    const transcribeResult = await downloadAndTranscribe(videoId);
+    return { videoId, ...transcribeResult };
+
+  } catch (error) {
+    console.error('[YouTube] Error:', error.message);
+    throw new Error(`Failed to extract transcript: ${error.message}`);
+  }
+}
+
 export async function getVideoMetadata(videoId) {
   return {
     videoId,
