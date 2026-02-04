@@ -16,6 +16,8 @@ const PORT = process.env.PORT || 3001;
 // Middleware
 app.use(cors({
   origin: [
+    'https://autoreplychat.com',
+    'https://api.autoreplychat.com',
     'https://autaichat-production.up.railway.app',
     'http://localhost:5173',
     'http://localhost:3000'
