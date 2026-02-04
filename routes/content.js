@@ -246,25 +246,6 @@ router.post('/youtube', async (req, res) => {
   }
 });
 
-    console.log(`[YouTube] Transcript stored: ${transcriptData.wordCount} words, ${result.chunksStored} chunks`);
-
-    res.json({
-      success: true,
-      message: 'YouTube transcript extracted successfully',
-      videoId: transcriptData.videoId,
-      wordCount: transcriptData.wordCount,
-      chunksStored: result.chunksStored
-    });
-
-  } catch (error) {
-    console.error('[YouTube] Error:', error);
-    res.status(500).json({ 
-      error: 'Failed to extract YouTube transcript',
-      details: error.message 
-    });
-  }
-});
-
 // GET /api/content/:customerId - List all documents for a customer
 router.get('/:customerId', async (req, res) => {
   try {
