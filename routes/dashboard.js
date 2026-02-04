@@ -3,536 +3,536 @@ import { query } from '../db/database.js';
 
 const router = express.Router();
 
-// GET /api/dashboard/:customerId - Customer dashboard page
+// GET /api/dashboard/:customerId
 router.get('/:customerId', async (req, res) => {
-  const { customerId } = req.params;
+  // SECURITY: Verify user can only access their own dashboard
+  const requestedCustomerId = parseInt(req.params.customerId);
+  const sessionCustomerId = req.session.customerId;
   
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>Auto Reply Chat - Dashboard</title>
-      <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f9fafb; }
-        .header { background: #2563eb; color: white; padding: 20px 40px; }
-        .header h1 { font-size: 24px; }
-        .container { max-width: 1200px; margin: 0 auto; padding: 40px 20px; }
-        .card { background: white; border-radius: 8px; padding: 30px; margin-bottom: 30px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-        .card h2 { color: #1f2937; margin-bottom: 20px; font-size: 20px; }
-        .tabs { display: flex; gap: 10px; border-bottom: 2px solid #e5e7eb; margin-bottom: 20px; }
-        .tab { padding: 10px 20px; cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; }
-        .tab.active { border-bottom-color: #2563eb; color: #2563eb; font-weight: 600; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        textarea, input[type="text"] { width: 100%; padding: 12px; border: 1px solid #d1d5db; border-radius: 6px; margin: 10px 0; font-family: inherit; }
-        button { background: #2563eb; color: white; padding: 12px 24px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; }
-        button:hover { background: #1d4ed8; }
-        button:disabled { background: #9ca3af; cursor: not-allowed; }
-        .code-block { background: #1f2937; color: #f9fafb; padding: 20px; border-radius: 6px; overflow-x: auto; margin: 10px 0; }
-        .code-block code { font-family: 'Courier New', monospace; font-size: 14px; white-space: pre; }
-        .stat { display: inline-block; margin-right: 30px; }
-        .stat-value { font-size: 32px; font-weight: bold; color: #2563eb; }
-        .stat-label { color: #6b7280; font-size: 14px; margin-top: 5px; }
-        .doc-list { list-style: none; }
-        .doc-item { padding: 15px; border: 1px solid #e5e7eb; border-radius: 6px; margin: 10px 0; display: flex; justify-content: space-between; align-items: center; }
-        .doc-meta { color: #6b7280; font-size: 14px; }
-        .delete-btn { background: #ef4444; padding: 8px 16px; font-size: 14px; }
-        .delete-btn:hover { background: #dc2626; }
-        .lead-item { padding: 15px; border: 1px solid #e5e7eb; border-radius: 6px; margin: 10px 0; }
-        .lead-email { color: #2563eb; font-weight: 600; }
-        .lead-date { color: #6b7280; font-size: 12px; }
-        .success { background: #d1fae5; color: #065f46; padding: 12px; border-radius: 6px; margin: 10px 0; }
-        .error { background: #fee2e2; color: #991b1b; padding: 12px; border-radius: 6px; margin: 10px 0; }
-        
-        /* File upload styles */
-        .upload-section { margin-bottom: 30px; }
-        .file-drop-zone { border: 2px dashed #d1d5db; border-radius: 8px; padding: 40px; text-align: center; background: #f9fafb; cursor: pointer; transition: all 0.3s; }
-        .file-drop-zone:hover { border-color: #2563eb; background: #eff6ff; }
-        .file-drop-zone.drag-over { border-color: #2563eb; background: #dbeafe; }
-        .file-input { display: none; }
-        .upload-icon { font-size: 48px; color: #9ca3af; margin-bottom: 10px; }
-        .file-info { margin-top: 15px; padding: 10px; background: #e0f2fe; border-radius: 6px; }
-        
-        /* Scrape type buttons */
-        .scrape-type-btn { border: none; border-radius: 6px; cursor: pointer; font-weight: 600; transition: all 0.2s; }
-        .scrape-type-btn.active { background: #2563eb !important; }
-        .scrape-type-btn:not(.active) { background: #6b7280 !important; }
-        .scrape-type-btn:not(.active):hover { background: #4b5563 !important; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>🎯 Auto Reply Chat Dashboard</h1>
-      </div>
+  if (requestedCustomerId !== sessionCustomerId) {
+    console.warn('[SECURITY] Unauthorized dashboard access attempt:', {
+      sessionCustomerId,
+      requestedCustomerId,
+      ip: req.ip
+    });
+    
+    return res.status(403).send(`
+      <!DOCTYPE html>
+      <html>
+      <head><title>Access Denied</title></head>
+      <body style="font-family: sans-serif; text-align: center; padding: 100px;">
+        <h1>403 - Access Denied</h1>
+        <p>You can only access your own dashboard.</p>
+        <a href="/api/dashboard/${sessionCustomerId}">Go to your dashboard</a>
+      </body>
+      </html>
+    `);
+  }
 
-      <div class="container">
-        <div class="card">
-          <div class="stat">
-            <div class="stat-value" id="doc-count">-</div>
-            <div class="stat-label">Documents</div>
-          </div>
-          <div class="stat">
-            <div class="stat-value" id="lead-count">-</div>
-            <div class="stat-label">Leads Captured</div>
-          </div>
+  try {
+    const customerId = requestedCustomerId;
+
+    // Get customer info
+    const customerResult = await query(
+      'SELECT name, email FROM customers WHERE id = $1',
+      [customerId]
+    );
+
+    if (customerResult.rows.length === 0) {
+      return res.status(404).send('Customer not found');
+    }
+
+    const customer = customerResult.rows[0];
+
+    // Get document count
+    const docCountResult = await query(
+      'SELECT COUNT(*) as count FROM documents WHERE customer_id = $1',
+      [customerId]
+    );
+    const documentCount = parseInt(docCountResult.rows[0].count);
+
+    // Get lead count
+    const leadCountResult = await query(
+      'SELECT COUNT(*) as count FROM leads WHERE customer_id = $1',
+      [customerId]
+    );
+    const leadCount = parseInt(leadCountResult.rows[0].count);
+
+    // Get recent documents
+    const documentsResult = await query(
+      `SELECT id, title, content_type, created_at 
+       FROM documents 
+       WHERE customer_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 10`,
+      [customerId]
+    );
+
+    const documents = documentsResult.rows.map(doc => ({
+      id: doc.id,
+      title: doc.title || 'Untitled',
+      type: doc.content_type,
+      date: new Date(doc.created_at).toLocaleDateString()
+    }));
+
+    // Get recent leads
+    const leadsResult = await query(
+      `SELECT id, name, email, created_at 
+       FROM leads 
+       WHERE customer_id = $1 
+       ORDER BY created_at DESC 
+       LIMIT 10`,
+      [customerId]
+    );
+
+    const leads = leadsResult.rows.map(lead => ({
+      id: lead.id,
+      name: lead.name,
+      email: lead.email,
+      date: new Date(lead.created_at).toLocaleDateString()
+    }));
+
+    // Render dashboard HTML
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Auto Reply Chat Dashboard</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f3f4f6;
+          }
+          .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          }
+          .header h1 { font-size: 24px; }
+          .header p { opacity: 0.9; margin-top: 5px; }
+          .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+          .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+          }
+          .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          }
+          .stat-card h3 { color: #6b7280; font-size: 14px; margin-bottom: 10px; }
+          .stat-card .number { font-size: 36px; font-weight: bold; color: #1f2937; }
+          .tabs {
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          }
+          .tab-buttons {
+            display: flex;
+            border-bottom: 1px solid #e5e7eb;
+          }
+          .tab-button {
+            flex: 1;
+            padding: 15px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: #6b7280;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+          }
+          .tab-button:hover { background: #f9fafb; }
+          .tab-button.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+          }
+          .tab-content {
+            padding: 20px;
+            display: none;
+          }
+          .tab-content.active { display: block; }
+          .upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 20px;
+            cursor: pointer;
+            transition: all 0.2s;
+          }
+          .upload-area:hover {
+            border-color: #667eea;
+            background: #f9fafb;
+          }
+          .form-group {
+            margin-bottom: 20px;
+          }
+          label {
+            display: block;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #374151;
+          }
+          input, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            font-size: 14px;
+          }
+          textarea { min-height: 150px; resize: vertical; }
+          button {
+            background: #667eea;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background 0.2s;
+          }
+          button:hover { background: #5568d3; }
+          .document-list, .lead-list {
+            list-style: none;
+          }
+          .document-item, .lead-item {
+            padding: 15px;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .document-item:last-child, .lead-item:last-child { border-bottom: none; }
+          .document-title { font-weight: 500; color: #1f2937; }
+          .document-meta { font-size: 13px; color: #6b7280; margin-top: 4px; }
+          .success-message {
+            background: #d1fae5;
+            color: #065f46;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+          }
+          .error-message {
+            background: #fee2e2;
+            color: #991b1b;
+            padding: 12px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+            display: none;
+          }
+          .website-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+          }
+          .website-controls button {
+            flex: 0 0 auto;
+            padding: 10px 20px;
+          }
+          .website-controls button.active {
+            background: #10b981;
+          }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1>🤖 Auto Reply Chat Dashboard</h1>
+          <p>Welcome back, ${customer.name}!</p>
         </div>
 
-        <div class="card">
-          <div class="tabs">
-            <div class="tab active" onclick="switchTab('upload')">Upload Content</div>
-            <div class="tab" onclick="switchTab('documents')">My Documents</div>
-            <div class="tab" onclick="switchTab('leads')">Leads</div>
-            <div class="tab" onclick="switchTab('embed')">Embed Code</div>
+        <div class="container">
+          <div class="stats">
+            <div class="stat-card">
+              <h3>Documents</h3>
+              <div class="number">${documentCount}</div>
+            </div>
+            <div class="stat-card">
+              <h3>Leads Captured</h3>
+              <div class="number">${leadCount}</div>
+            </div>
           </div>
 
-          <!-- Upload Content Tab -->
-          <div id="upload-tab" class="tab-content active">
-            <h2>Upload Training Content</h2>
-            <p style="color: #6b7280; margin-bottom: 20px;">Add content for your chatbot to learn from. The more context you provide, the better it will answer questions.</p>
-            
-            <!-- File Upload Section -->
-            <div class="upload-section">
-              <h3 style="margin-bottom: 10px;">Upload Files</h3>
-              <div class="file-drop-zone" id="dropZone">
-                <div class="upload-icon">📄</div>
+          <div class="tabs">
+            <div class="tab-buttons">
+              <button class="tab-button active" onclick="switchTab('upload')">Upload Content</button>
+              <button class="tab-button" onclick="switchTab('documents')">My Documents</button>
+              <button class="tab-button" onclick="switchTab('leads')">Leads</button>
+              <button class="tab-button" onclick="switchTab('embed')">Embed Code</button>
+            </div>
+
+            <!-- Upload Content Tab -->
+            <div id="upload-tab" class="tab-content active">
+              <h2 style="margin-bottom: 20px;">Upload Training Content</h2>
+              <p style="color: #6b7280; margin-bottom: 20px;">Add content for your chatbot to learn from. The more context you provide, the better it will answer questions.</p>
+
+              <div id="success-message" class="success-message"></div>
+              <div id="error-message" class="error-message"></div>
+
+              <h3 style="margin-bottom: 15px;">Upload Files</h3>
+              <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <div style="font-size: 48px; margin-bottom: 10px;">📄</div>
                 <p><strong>Click to browse</strong> or drag and drop files here</p>
-                <p style="color: #6b7280; font-size: 14px; margin-top: 5px;">Supports: PDF, Word (.docx), Text (.txt), CSV</p>
-                <p style="color: #6b7280; font-size: 12px;">Max file size: 20MB</p>
-                <input type="file" id="fileInput" class="file-input" accept=".pdf,.docx,.doc,.txt,.csv" />
+                <p style="color: #6b7280; font-size: 13px; margin-top: 8px;">Supports: PDF, Word (.docx), Text (.txt), CSV</p>
+                <p style="color: #6b7280; font-size: 13px;">Max file size: 20MB</p>
               </div>
-              <div id="file-info" class="file-info" style="display: none;"></div>
-              <button id="uploadFileBtn" style="margin-top: 10px; display: none;" onclick="uploadFile()">Upload File</button>
-              <div id="file-upload-result"></div>
-            </div>
+              <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.txt,.csv" multiple onchange="handleFileUpload(event)">
 
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-
-            <!-- Website Scraping Section -->
-            <div class="upload-section">
-              <h3 style="margin-bottom: 10px;">Train from Website</h3>
-              <p style="color: #6b7280; font-size: 14px; margin-bottom: 15px;">Enter a website URL and choose how to scrape it.</p>
-              
-              <!-- Scrape type buttons -->
-              <div style="margin: 15px 0;">
-                <button type="button" class="scrape-type-btn active" data-type="full" 
-                        style="margin-right: 10px; padding: 8px 16px; font-size: 14px;">
-                  Full Website
-                </button>
-                <button type="button" class="scrape-type-btn" data-type="single" 
-                        style="padding: 8px 16px; font-size: 14px;">
-                  Single Page
-                </button>
+              <h3 style="margin: 30px 0 15px;">Train from Website</h3>
+              <p style="color: #6b7280; margin-bottom: 15px;">Enter a website URL and choose how to scrape it.</p>
+              <div class="website-controls">
+                <button id="fullWebsiteBtn" class="active" onclick="setWebsiteMode('full')">Full Website</button>
+                <button id="singlePageBtn" onclick="setWebsiteMode('single')">Single Page</button>
               </div>
-              
-              <input type="text" id="website-url" placeholder="https://example.com" />
-              <button onclick="scrapeWebsite()" id="scrapeBtn">Start Scraping</button>
-              <div id="scrape-result"></div>
-            </div>
+              <div class="form-group">
+                <input type="url" id="websiteUrl" placeholder="https://example.com" />
+              </div>
+              <button onclick="handleWebsiteScrape()">Start Scraping</button>
 
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
+              <h3 style="margin: 30px 0 15px;">Train from YouTube</h3>
+              <p style="color: #6b7280; margin-bottom: 15px;">Extract transcript from any YouTube video with captions.</p>
+              <div class="form-group">
+                <input type="url" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." />
+              </div>
+              <button onclick="handleYoutubeTranscript()">Extract Transcript</button>
 
-            <!-- YouTube Section -->
-            <div class="upload-section">
-              <h3 style="margin-bottom: 10px;">Train from YouTube</h3>
-              <p style="color: #6b7280; font-size: 14px; margin-bottom: 15px;">Extract transcript from any YouTube video with captions.</p>
-              
-              <input type="text" id="youtube-url" placeholder="https://www.youtube.com/watch?v=..." />
-              <button onclick="extractYouTube()" id="youtubeBtn">Extract Transcript</button>
-              <div id="youtube-result"></div>
-            </div>
-
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #e5e7eb;">
-
-            <!-- Text Upload Section -->
-            <div class="upload-section">
-              <h3 style="margin-bottom: 10px;">Or Paste Text</h3>
-              <input type="text" id="doc-title" placeholder="Document title (e.g., 'Product Information', 'FAQ')" />
-              <textarea id="doc-content" rows="12" placeholder="Paste your content here...
-
-Examples:
+              <h3 style="margin: 30px 0 15px;">Or Paste Text</h3>
+              <div class="form-group">
+                <label for="textTitle">Document title (e.g., "Product Information", "FAQ")</label>
+                <input type="text" id="textTitle" placeholder="Product Information" />
+              </div>
+              <div class="form-group">
+                <label for="textContent">Paste your content here...</label>
+                <textarea id="textContent" placeholder="Examples:
 - Company information
 - Product/service descriptions
-- Pricing details
+- Pricing information
 - FAQ
 - Contact information"></textarea>
-              <button onclick="uploadDocument()">Upload Text</button>
-              <div id="upload-result"></div>
+              </div>
+              <button onclick="handleTextUpload()">Upload Text</button>
             </div>
-          </div>
 
-          <!-- Documents Tab -->
-          <div id="documents-tab" class="tab-content">
-            <h2>Your Documents</h2>
-            <ul id="doc-list" class="doc-list"></ul>
-          </div>
-
-          <!-- Leads Tab -->
-          <div id="leads-tab" class="tab-content">
-            <h2>Captured Leads</h2>
-            <div id="lead-list"></div>
-          </div>
-
-          <!-- Embed Code Tab -->
-          <div id="embed-tab" class="tab-content">
-            <h2>Add Chatbot to Your Website</h2>
-            <p style="color: #6b7280; margin-bottom: 20px;">Copy this code and paste it before the closing &lt;/body&gt; tag on your website.</p>
-            <div class="code-block">
-              <code id="embed-code">Loading...</code>
+            <!-- My Documents Tab -->
+            <div id="documents-tab" class="tab-content">
+              <h2 style="margin-bottom: 20px;">My Documents</h2>
+              ${documents.length > 0 ? `
+                <ul class="document-list">
+                  ${documents.map(doc => `
+                    <li class="document-item">
+                      <div>
+                        <div class="document-title">${doc.title}</div>
+                        <div class="document-meta">${doc.type} • ${doc.date}</div>
+                      </div>
+                    </li>
+                  `).join('')}
+                </ul>
+              ` : '<p style="color: #6b7280;">No documents yet. Upload some content to get started!</p>'}
             </div>
-            <button onclick="copyEmbedCode()">Copy to Clipboard</button>
-            <div id="copy-result"></div>
+
+            <!-- Leads Tab -->
+            <div id="leads-tab" class="tab-content">
+              <h2 style="margin-bottom: 20px;">Captured Leads</h2>
+              ${leads.length > 0 ? `
+                <ul class="lead-list">
+                  ${leads.map(lead => `
+                    <li class="lead-item">
+                      <div>
+                        <div class="document-title">${lead.name}</div>
+                        <div class="document-meta">${lead.email} • ${lead.date}</div>
+                      </div>
+                    </li>
+                  `).join('')}
+                </ul>
+              ` : '<p style="color: #6b7280;">No leads captured yet.</p>'}
+            </div>
+
+            <!-- Embed Code Tab -->
+            <div id="embed-tab" class="tab-content">
+              <h2 style="margin-bottom: 20px;">Embed Your Chatbot</h2>
+              <p style="color: #6b7280; margin-bottom: 20px;">Copy this code and paste it before the closing &lt;/body&gt; tag on your website.</p>
+              <textarea readonly style="font-family: monospace; background: #f9fafb;" onclick="this.select()">
+&lt;script&gt;
+  (function() {
+    var script = document.createElement('script');
+    script.src = 'https://autoreplychat.com/widget.js';
+    script.setAttribute('data-customer-id', '${customerId}');
+    document.body.appendChild(script);
+  })();
+&lt;/script&gt;</textarea>
+            </div>
           </div>
         </div>
-      </div>
 
-      <script>
-        const customerId = ${customerId};
-        let embedCode = '';
-        let selectedFile = null;
+        <script>
+          let websiteMode = 'full';
 
-        // File upload drag and drop
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const fileInfo = document.getElementById('file-info');
-        const uploadFileBtn = document.getElementById('uploadFileBtn');
-
-        dropZone.addEventListener('click', () => fileInput.click());
-
-        dropZone.addEventListener('dragover', (e) => {
-          e.preventDefault();
-          dropZone.classList.add('drag-over');
-        });
-
-        dropZone.addEventListener('dragleave', () => {
-          dropZone.classList.remove('drag-over');
-        });
-
-        dropZone.addEventListener('drop', (e) => {
-          e.preventDefault();
-          dropZone.classList.remove('drag-over');
-          
-          const files = e.dataTransfer.files;
-          if (files.length > 0) {
-            handleFileSelect(files[0]);
+          function switchTab(tab) {
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(tab + '-tab').classList.add('active');
           }
-        });
 
-        fileInput.addEventListener('change', (e) => {
-          if (e.target.files.length > 0) {
-            handleFileSelect(e.target.files[0]);
+          function setWebsiteMode(mode) {
+            websiteMode = mode;
+            document.getElementById('fullWebsiteBtn').classList.toggle('active', mode === 'full');
+            document.getElementById('singlePageBtn').classList.toggle('active', mode === 'single');
           }
-        });
 
-        function handleFileSelect(file) {
-          selectedFile = file;
-          fileInfo.style.display = 'block';
-          uploadFileBtn.style.display = 'block';
-          fileInfo.innerHTML = \`
-            <strong>Selected file:</strong> \${file.name}<br>
-            <strong>Size:</strong> \${(file.size / 1024 / 1024).toFixed(2)} MB<br>
-            <strong>Type:</strong> \${file.type}
-          \`;
-        }
+          function showSuccess(message) {
+            const el = document.getElementById('success-message');
+            el.textContent = message;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+            location.reload();
+          }
 
-        async function uploadFile() {
-          if (!selectedFile) return;
+          function showError(message) {
+            const el = document.getElementById('error-message');
+            el.textContent = message;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
+          }
 
-          const result = document.getElementById('file-upload-result');
-          result.innerHTML = '<div style="color: #6b7280; margin-top: 10px;">Uploading and processing file...</div>';
-          uploadFileBtn.disabled = true;
-
-          try {
+          async function handleFileUpload(event) {
+            const files = event.target.files;
             const formData = new FormData();
-            formData.append('file', selectedFile);
-            formData.append('customerId', customerId);
-
-            const response = await fetch('/api/content/upload', {
-              method: 'POST',
-              body: formData
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-              result.innerHTML = '<div class="success">✓ File uploaded! ' + data.chunksStored + ' chunks stored.</div>';
-              selectedFile = null;
-              fileInput.value = '';
-              fileInfo.style.display = 'none';
-              uploadFileBtn.style.display = 'none';
-              loadStats();
-            } else {
-              result.innerHTML = '<div class="error">Error: ' + (data.error || 'Upload failed') + '</div>';
+            
+            for (let file of files) {
+              formData.append('files', file);
             }
-          } catch (error) {
-            result.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
-          } finally {
-            uploadFileBtn.disabled = false;
-          }
-        }
+            formData.append('customerId', '${customerId}');
 
-        // Handle scrape type button clicks
-        document.querySelectorAll('.scrape-type-btn').forEach(btn => {
-          btn.addEventListener('click', function() {
-            document.querySelectorAll('.scrape-type-btn').forEach(b => b.classList.remove('active'));
-            this.classList.add('active');
-          });
-        });
+            try {
+              const response = await fetch('/api/content/upload', {
+                method: 'POST',
+                body: formData
+              });
 
-        // Scrape website
-        async function scrapeWebsite() {
-          const url = document.getElementById('website-url').value;
-          const result = document.getElementById('scrape-result');
-          const scrapeBtn = document.getElementById('scrapeBtn');
-          
-          // Get selected scrape type
-          const activeBtn = document.querySelector('.scrape-type-btn.active');
-          const isFullSite = activeBtn.dataset.type === 'full';
-
-          if (!url.trim()) {
-            result.innerHTML = '<div class="error">Please enter a website URL</div>';
-            return;
-          }
-
-          try {
-            new URL(url);
-          } catch (e) {
-            result.innerHTML = '<div class="error">Please enter a valid URL (e.g., https://example.com)</div>';
-            return;
-          }
-
-          const message = isFullSite 
-            ? '🔄 Crawling full website... This may take 30-60 seconds.' 
-            : '🔄 Scraping single page...';
-          
-          result.innerHTML = '<div style="color: #6b7280; margin-top: 10px;">' + message + '</div>';
-          scrapeBtn.disabled = true;
-
-          try {
-            const response = await fetch('/api/content/website', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                customerId: customerId,
-                url: url,
-                fullSite: isFullSite
-              })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-              if (isFullSite) {
-                result.innerHTML = '<div class="success">✓ Full website crawled! ' + data.pagesScraped + ' pages scraped, ' + data.totalChunks + ' chunks stored.</div>';
+              const data = await response.json();
+              
+              if (response.ok) {
+                showSuccess(data.message || 'Files uploaded successfully!');
               } else {
-                result.innerHTML = '<div class="success">✓ Page scraped! ' + data.chunksStored + ' chunks stored (' + data.wordCount + ' words)</div>';
+                showError(data.error || 'Upload failed');
               }
-              document.getElementById('website-url').value = '';
-              loadStats();
-            } else {
-              result.innerHTML = '<div class="error">Error: ' + (data.error || data.details || 'Scraping failed') + '</div>';
+            } catch (error) {
+              showError('Network error. Please try again.');
             }
-          } catch (error) {
-            result.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
-          } finally {
-            scrapeBtn.disabled = false;
-          }
-        }
-
-        // Extract YouTube transcript
-        async function extractYouTube() {
-          const url = document.getElementById('youtube-url').value;
-          const result = document.getElementById('youtube-result');
-          const youtubeBtn = document.getElementById('youtubeBtn');
-
-          if (!url.trim()) {
-            result.innerHTML = '<div class="error">Please enter a YouTube URL</div>';
-            return;
           }
 
-          result.innerHTML = '<div style="color: #6b7280; margin-top: 10px;">🔄 Extracting transcript...</div>';
-          youtubeBtn.disabled = true;
-
-          try {
-            const response = await fetch('/api/content/youtube', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                customerId: customerId,
-                videoUrl: url
-              })
-            });
-
-            const data = await response.json();
-
-            if (data.success) {
-              result.innerHTML = '<div class="success">✓ Transcript extracted! ' + data.wordCount + ' words, ' + data.chunksStored + ' chunks stored.</div>';
-              document.getElementById('youtube-url').value = '';
-              loadStats();
-            } else {
-              result.innerHTML = '<div class="error">Error: ' + (data.error || data.details || 'Extraction failed') + '</div>';
-            }
-          } catch (error) {
-            result.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
-          } finally {
-            youtubeBtn.disabled = false;
-          }
-        }
-
-        // Switch tabs
-        function switchTab(tabName) {
-          document.querySelectorAll('.tab').forEach(tab => tab.classList.remove('active'));
-          document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-          
-          event.target.classList.add('active');
-          document.getElementById(tabName + '-tab').classList.add('active');
-          
-          if (tabName === 'documents') loadDocuments();
-          if (tabName === 'leads') loadLeads();
-        }
-
-        // Upload text document
-        async function uploadDocument() {
-          const title = document.getElementById('doc-title').value;
-          const content = document.getElementById('doc-content').value;
-          const result = document.getElementById('upload-result');
-
-          if (!content.trim()) {
-            result.innerHTML = '<div class="error">Please enter some content</div>';
-            return;
-          }
-
-          result.innerHTML = '<div style="color: #6b7280; margin-top: 10px;">Uploading...</div>';
-
-          try {
-            const response = await fetch('/api/content/text', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                customerId: customerId,
-                title: title || 'Untitled Document',
-                content: content
-              })
-            });
-
-            const data = await response.json();
-            
-            if (data.success) {
-              result.innerHTML = '<div class="success">✓ Content uploaded! ' + data.chunksStored + ' chunks stored.</div>';
-              document.getElementById('doc-title').value = '';
-              document.getElementById('doc-content').value = '';
-              loadStats();
-            } else {
-              result.innerHTML = '<div class="error">Error: ' + data.error + '</div>';
-            }
-          } catch (error) {
-            result.innerHTML = '<div class="error">Error: ' + error.message + '</div>';
-          }
-        }
-
-        // Load documents
-        async function loadDocuments() {
-          const list = document.getElementById('doc-list');
-          list.innerHTML = '<li>Loading...</li>';
-
-          try {
-            const response = await fetch('/api/content/' + customerId);
-            const data = await response.json();
-
-            if (data.documents.length === 0) {
-              list.innerHTML = '<li style="color: #6b7280;">No documents yet. Upload some content to get started!</li>';
+          async function handleWebsiteScrape() {
+            const url = document.getElementById('websiteUrl').value;
+            if (!url) {
+              showError('Please enter a website URL');
               return;
             }
 
-            list.innerHTML = data.documents.map(doc => \`
-              <li class="doc-item">
-                <div>
-                  <strong>\${doc.title}</strong>
-                  <div class="doc-meta">\${doc.content_type} • \${new Date(doc.created_at).toLocaleDateString()}</div>
-                </div>
-                <button class="delete-btn" onclick="deleteDocument(\${doc.id})">Delete</button>
-              </li>
-            \`).join('');
-          } catch (error) {
-            list.innerHTML = '<li class="error">Error loading documents</li>';
+            try {
+              const response = await fetch('/api/content/scrape-website', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  customerId: '${customerId}',
+                  url,
+                  mode: websiteMode
+                })
+              });
+
+              const data = await response.json();
+              
+              if (response.ok) {
+                showSuccess(data.message || 'Website scraped successfully!');
+              } else {
+                showError(data.error || 'Scraping failed');
+              }
+            } catch (error) {
+              showError('Network error. Please try again.');
+            }
           }
-        }
 
-        // Delete document
-        async function deleteDocument(docId) {
-          if (!confirm('Delete this document?')) return;
-
-          try {
-            await fetch('/api/content/' + docId, { method: 'DELETE' });
-            loadDocuments();
-            loadStats();
-          } catch (error) {
-            alert('Error deleting document');
-          }
-        }
-
-        // Load leads
-        async function loadLeads() {
-          const container = document.getElementById('lead-list');
-          container.innerHTML = '<div style="color: #6b7280;">Loading...</div>';
-
-          try {
-            const response = await fetch('/api/customers/' + customerId + '/leads');
-            const data = await response.json();
-
-            if (data.leads.length === 0) {
-              container.innerHTML = '<div style="color: #6b7280;">No leads captured yet.</div>';
+          async function handleYoutubeTranscript() {
+            const url = document.getElementById('youtubeUrl').value;
+            if (!url) {
+              showError('Please enter a YouTube URL');
               return;
             }
 
-            container.innerHTML = data.leads.map(lead => \`
-              <div class="lead-item">
-                <div><strong>\${lead.name}</strong></div>
-                <div class="lead-email">\${lead.email}</div>
-                <div class="lead-date">\${new Date(lead.created_at).toLocaleString()}</div>
-              </div>
-            \`).join('');
-          } catch (error) {
-            container.innerHTML = '<div class="error">Error loading leads</div>';
+            try {
+              const response = await fetch('/api/content/youtube', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  customerId: '${customerId}',
+                  url
+                })
+              });
+
+              const data = await response.json();
+              
+              if (response.ok) {
+                showSuccess(data.message || 'Transcript extracted successfully!');
+              } else {
+                showError(data.error || 'Extraction failed');
+              }
+            } catch (error) {
+              showError('Network error. Please try again.');
+            }
           }
-        }
 
-        // Load stats
-        async function loadStats() {
-          try {
-            const response = await fetch('/api/customers/' + customerId);
-            const data = await response.json();
-            
-            const docsResponse = await fetch('/api/content/' + customerId);
-            const docsData = await docsResponse.json();
-            document.getElementById('doc-count').textContent = docsData.documents.length;
-            
-            const leadsResponse = await fetch('/api/customers/' + customerId + '/leads');
-            const leadsData = await leadsResponse.json();
-            document.getElementById('lead-count').textContent = leadsData.leads.length;
-            
-            embedCode = data.customer.embedCode;
-            document.getElementById('embed-code').textContent = embedCode;
-          } catch (error) {
-            console.error('Error loading stats:', error);
+          async function handleTextUpload() {
+            const title = document.getElementById('textTitle').value;
+            const content = document.getElementById('textContent').value;
+
+            if (!title || !content) {
+              showError('Please fill in both title and content');
+              return;
+            }
+
+            try {
+              const response = await fetch('/api/content/text', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  customerId: '${customerId}',
+                  title,
+                  content
+                })
+              });
+
+              const data = await response.json();
+              
+              if (response.ok) {
+                showSuccess(data.message || 'Text uploaded successfully!');
+                document.getElementById('textTitle').value = '';
+                document.getElementById('textContent').value = '';
+              } else {
+                showError(data.error || 'Upload failed');
+              }
+            } catch (error) {
+              showError('Network error. Please try again.');
+            }
           }
-        }
-
-        // Copy embed code
-        function copyEmbedCode() {
-          navigator.clipboard.writeText(embedCode);
-          document.getElementById('copy-result').innerHTML = '<div class="success">✓ Copied to clipboard!</div>';
-          setTimeout(() => {
-            document.getElementById('copy-result').innerHTML = '';
-          }, 3000);
-        }
-
-        // Load initial data
-        loadStats();
-      </script>
-    </body>
-    </html>
-  `);
+        </script>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('Dashboard error:', error);
+    res.status(500).send('Internal server error');
+  }
 });
 
 export default router;
