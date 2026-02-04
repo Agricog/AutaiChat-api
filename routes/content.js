@@ -97,16 +97,48 @@ router.post('/website', async (req, res) => {
       return res.status(400).json({ error: 'customerId and url are required' });
     }
 
-    // TODO: Implement web scraping (next step)
+    // Validate URL
+    let validUrl;
+    try {
+      validUrl = new URL(url);
+    } catch (e) {
+      return res.status(400).json({ error: 'Invalid URL format' });
+    }
+
+    // Import scraper
+    const { scrapeWebpage } = await import('../services/webScraper.js');
+
+    // Scrape the webpage
+    const pageData = await scrapeWebpage(validUrl.href);
+
+    // Store in database
+    const result = await storeDocument({
+      customerId: parseInt(customerId),
+      title: pageData.title,
+      contentType: 'website',
+      sourceUrl: pageData.url,
+      content: pageData.content,
+      metadata: {
+        scrapedAt: new Date().toISOString(),
+        wordCount: pageData.wordCount,
+        url: pageData.url
+      }
+    });
+
     res.json({
-      success: false,
-      message: 'Website scraping coming soon',
-      note: 'Will be implemented next'
+      success: true,
+      message: 'Website content scraped successfully',
+      title: pageData.title,
+      wordCount: pageData.wordCount,
+      ...result
     });
 
   } catch (error) {
     console.error('Error scraping website:', error);
-    res.status(500).json({ error: 'Failed to scrape website' });
+    res.status(500).json({ 
+      error: 'Failed to scrape website',
+      details: error.message 
+    });
   }
 });
 
