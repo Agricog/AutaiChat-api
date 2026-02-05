@@ -5,54 +5,78 @@ import { upload, extractTextFromFile, cleanupFile } from '../services/fileUpload
 
 const router = express.Router();
 
-// POST /api/content/upload - Upload file (PDF, Word, TXT)
-router.post('/upload', upload.single('file'), async (req, res) => {
+// POST /api/content/upload - Upload files (PDF, Word, TXT, CSV, Excel)
+router.post('/upload', upload.array('files', 10), async (req, res) => {
   try {
     const { customerId } = req.body;
-    const file = req.file;
+    const files = req.files;
 
-    if (!customerId || !file) {
-      return res.status(400).json({ error: 'customerId and file are required' });
+    if (!customerId || !files || files.length === 0) {
+      return res.status(400).json({ error: 'customerId and at least one file are required' });
     }
 
-    // Extract text from file
-    const text = await extractTextFromFile(file.path, file.mimetype);
+    const results = [];
+    
+    // Process each file
+    for (const file of files) {
+      try {
+        // Extract text from file
+        const text = await extractTextFromFile(file.path, file.mimetype);
 
-    // Store in database
-    const result = await storeDocument({
-      customerId: parseInt(customerId),
-      title: file.originalname,
-      contentType: file.mimetype.includes('pdf') ? 'pdf' : 
-                   file.mimetype.includes('word') ? 'docx' : 'text',
-      sourceUrl: file.originalname,
-      content: text,
-      metadata: {
-        uploadedAt: new Date().toISOString(),
-        filename: file.originalname,
-        fileSize: file.size,
-        mimetype: file.mimetype
+        // Store in database
+        const result = await storeDocument({
+          customerId: parseInt(customerId),
+          title: file.originalname,
+          contentType: file.mimetype.includes('pdf') ? 'pdf' : 
+                       file.mimetype.includes('word') ? 'docx' :
+                       file.mimetype.includes('csv') ? 'csv' :
+                       file.mimetype.includes('spreadsheet') ? 'excel' : 'text',
+          sourceUrl: file.originalname,
+          content: text,
+          metadata: {
+            uploadedAt: new Date().toISOString(),
+            filename: file.originalname,
+            fileSize: file.size,
+            mimetype: file.mimetype
+          }
+        });
+
+        results.push({
+          filename: file.originalname,
+          success: true,
+          chunksStored: result.chunksStored
+        });
+
+        // Clean up uploaded file
+        cleanupFile(file.path);
+      } catch (error) {
+        console.error(`Error processing file ${file.originalname}:`, error);
+        cleanupFile(file.path);
+        results.push({
+          filename: file.originalname,
+          success: false,
+          error: error.message
+        });
       }
-    });
+    }
 
-    // Clean up uploaded file
-    cleanupFile(file.path);
-
+    const successCount = results.filter(r => r.success).length;
+    
     res.json({
       success: true,
-      message: 'File uploaded successfully',
-      ...result
+      message: `${successCount} of ${files.length} file(s) uploaded successfully`,
+      results
     });
-
   } catch (error) {
-    console.error('Error uploading file:', error);
+    console.error('Error uploading files:', error);
     
-    // Clean up file on error
-    if (req.file) {
-      cleanupFile(req.file.path);
+    // Clean up files on error
+    if (req.files) {
+      req.files.forEach(file => cleanupFile(file.path));
     }
     
     res.status(500).json({ 
-      error: 'Failed to upload file',
+      error: 'Failed to upload files',
       details: error.message 
     });
   }
@@ -62,7 +86,7 @@ router.post('/upload', upload.single('file'), async (req, res) => {
 router.post('/text', async (req, res) => {
   try {
     const { customerId, title, content } = req.body;
-
+    
     if (!customerId || !content) {
       return res.status(400).json({ error: 'customerId and content are required' });
     }
@@ -81,21 +105,22 @@ router.post('/text', async (req, res) => {
       message: 'Content uploaded successfully',
       ...result
     });
-
   } catch (error) {
     console.error('Error uploading text content:', error);
     res.status(500).json({ error: 'Failed to upload content' });
   }
 });
 
-// POST /api/content/website - Scrape and store website content
-router.post('/website', async (req, res) => {
+// POST /api/content/scrape-website - Scrape and store website content
+router.post('/scrape-website', async (req, res) => {
   try {
-    const { customerId, url, fullSite = true } = req.body;
-
+    const { customerId, url, mode } = req.body;
+    
     if (!customerId || !url) {
       return res.status(400).json({ error: 'customerId and url are required' });
     }
+
+    const fullSite = mode === 'full';
 
     // Validate URL
     let validUrl;
@@ -149,13 +174,11 @@ router.post('/website', async (req, res) => {
         pagesScraped: pageCount,
         totalChunks: totalChunks
       });
-
     } else {
       console.log('[Website Scrape] Scraping single page...');
       
       // Scrape single page only
       const pageData = await scrapeWebpage(validUrl.href);
-
       const result = await storeDocument({
         customerId: parseInt(customerId),
         title: pageData.title,
@@ -179,7 +202,6 @@ router.post('/website', async (req, res) => {
         chunksStored: result.chunksStored
       });
     }
-
   } catch (error) {
     console.error('[Website Scrape] ERROR:', error);
     res.status(500).json({ 
@@ -192,19 +214,19 @@ router.post('/website', async (req, res) => {
 // POST /api/content/youtube - Extract YouTube video transcript
 router.post('/youtube', async (req, res) => {
   try {
-    const { customerId, videoUrl } = req.body;
-
-    if (!customerId || !videoUrl) {
-      return res.status(400).json({ error: 'customerId and videoUrl are required' });
+    const { customerId, url } = req.body;
+    
+    if (!customerId || !url) {
+      return res.status(400).json({ error: 'customerId and url are required' });
     }
 
-    console.log(`[YouTube] Customer ${customerId} | URL: ${videoUrl}`);
+    console.log(`[YouTube] Customer ${customerId} | URL: ${url}`);
 
     // Import YouTube transcript service
     const { getYoutubeTranscript, getVideoMetadata } = await import('../services/youtubeTranscript.js');
 
     // Extract transcript (tries captions first, then Whisper)
-    const transcriptData = await getYoutubeTranscript(videoUrl);
+    const transcriptData = await getYoutubeTranscript(url);
     const metadata = await getVideoMetadata(transcriptData.videoId);
 
     console.log(`[YouTube] Transcript obtained via ${transcriptData.method}`);
@@ -236,7 +258,6 @@ router.post('/youtube', async (req, res) => {
       chunksStored: result.chunksStored,
       method: transcriptData.method
     });
-
   } catch (error) {
     console.error('[YouTube] Error:', error);
     res.status(500).json({ 
@@ -250,7 +271,7 @@ router.post('/youtube', async (req, res) => {
 router.get('/:customerId', async (req, res) => {
   try {
     const { customerId } = req.params;
-
+    
     const result = await query(
       `SELECT id, title, content_type, source_url, metadata, created_at
        FROM documents
@@ -263,7 +284,6 @@ router.get('/:customerId', async (req, res) => {
       success: true,
       documents: result.rows
     });
-
   } catch (error) {
     console.error('Error listing documents:', error);
     res.status(500).json({ error: 'Failed to list documents' });
@@ -274,7 +294,7 @@ router.get('/:customerId', async (req, res) => {
 router.delete('/:documentId', async (req, res) => {
   try {
     const { documentId } = req.params;
-
+    
     await query(
       `DELETE FROM documents WHERE id = $1`,
       [documentId]
@@ -284,7 +304,6 @@ router.delete('/:documentId', async (req, res) => {
       success: true,
       message: 'Document deleted successfully'
     });
-
   } catch (error) {
     console.error('Error deleting document:', error);
     res.status(500).json({ error: 'Failed to delete document' });
