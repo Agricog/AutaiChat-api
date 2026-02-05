@@ -59,6 +59,13 @@ router.get('/:customerId', async (req, res) => {
     );
     const leadCount = parseInt(leadCountResult.rows[0].count);
     
+    // Get message count
+    const messageCountResult = await query(
+      'SELECT COUNT(*) as count FROM messages WHERE customer_id = $1',
+      [customerId]
+    );
+    const messageCount = parseInt(messageCountResult.rows[0].count);
+    
     // Get recent documents (non Q&A)
     const documentsResult = await query(
       `SELECT id, title, content_type, created_at 
@@ -107,6 +114,26 @@ router.get('/:customerId', async (req, res) => {
       name: lead.name,
       email: lead.email,
       date: new Date(lead.created_at).toLocaleDateString()
+    }));
+
+    // Get recent messages
+    const messagesResult = await query(
+      `SELECT m.id, m.role, m.content, m.created_at, l.name as lead_name, l.email as lead_email
+       FROM messages m
+       LEFT JOIN leads l ON m.lead_id = l.id
+       WHERE m.customer_id = $1 
+       ORDER BY m.created_at DESC 
+       LIMIT 100`,
+      [customerId]
+    );
+
+    const messages = messagesResult.rows.map(msg => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.content,
+      leadName: msg.lead_name || 'Anonymous',
+      leadEmail: msg.lead_email || '',
+      date: new Date(msg.created_at).toLocaleString()
     }));
 
     // Render dashboard HTML
@@ -384,6 +411,10 @@ router.get('/:customerId', async (req, res) => {
               <h3>Leads Captured</h3>
               <div class="number">${leadCount}</div>
             </div>
+            <div class="stat-card">
+              <h3>Messages</h3>
+              <div class="number">${messageCount}</div>
+            </div>
           </div>
           
           <div class="tabs">
@@ -392,6 +423,7 @@ router.get('/:customerId', async (req, res) => {
               <button class="tab-button" onclick="switchTab('documents')">My Documents</button>
               <button class="tab-button" onclick="switchTab('qa')">Q&A Pairs</button>
               <button class="tab-button" onclick="switchTab('leads')">Leads</button>
+              <button class="tab-button" onclick="switchTab('messages')">Messages</button>
               <button class="tab-button" onclick="switchTab('embed')">Embed Code</button>
             </div>
             
@@ -542,6 +574,33 @@ You are a friendly customer support assistant for XYZ Company.
                   `).join('')}
                 </ul>
               ` : '<p style="color: #6b7280;">No leads captured yet.</p>'}
+            </div>
+
+            <!-- Messages Tab -->
+            <div id="messages-tab" class="tab-content">
+              <h2 style="margin-bottom: 20px;">Chat Messages</h2>
+              ${messages.length > 0 ? `
+                <div style="max-height: 600px; overflow-y: auto;">
+                  ${messages.map(msg => `
+                    <div style="padding: 15px; border-bottom: 1px solid #e5e7eb; background: ${msg.role === 'user' ? '#f9fafb' : '#eff6ff'};">
+                      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                        <div>
+                          <span style="font-weight: 600; color: ${msg.role === 'user' ? '#1f2937' : '#2563eb'};">
+                            ${msg.role === 'user' ? '👤 User' : '🤖 Assistant'}
+                          </span>
+                          <span style="color: #6b7280; font-size: 13px; margin-left: 10px;">
+                            ${msg.leadName}${msg.leadEmail ? ` (${msg.leadEmail})` : ''}
+                          </span>
+                        </div>
+                        <span style="color: #6b7280; font-size: 12px;">${msg.date}</span>
+                      </div>
+                      <div style="color: #1f2937; line-height: 1.6;">
+                        ${msg.content}
+                      </div>
+                    </div>
+                  `).join('')}
+                </div>
+              ` : '<p style="color: #6b7280;">No messages yet.</p>'}
             </div>
             
             <!-- Embed Code Tab -->
