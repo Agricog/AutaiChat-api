@@ -90,17 +90,17 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 
 // Public bot settings endpoint (for widget)
-app.get('/api/bots/:botId/settings', async (req, res) => {
+app.get('/api/bots/:publicId/settings', async (req, res) => {
   try {
     const { query } = await import('./db/database.js');
-    const botId = parseInt(req.params.botId);
+    const publicId = req.params.publicId;
     
     const result = await query(
-      `SELECT id, name, greeting_message, header_title, header_color, text_color, lead_capture_enabled,
+      `SELECT id, public_id, name, greeting_message, header_title, header_color, text_color, lead_capture_enabled,
               chat_bubble_bg, avatar_bg, button_style, button_position, button_size, bar_message,
               chat_window_bg, user_message_bg, bot_message_bg, send_button_bg, lead_form_message
-       FROM bots WHERE id = $1`,
-      [botId]
+       FROM bots WHERE public_id = $1`,
+      [publicId]
     );
     
     if (result.rows.length === 0) {
@@ -109,7 +109,7 @@ app.get('/api/bots/:botId/settings', async (req, res) => {
     
     const bot = result.rows[0];
     res.json({
-      botId: bot.id,
+      botId: bot.public_id,
       name: bot.name,
       greetingMessage: bot.greeting_message || 'Thank you for visiting! How may we assist you today?',
       headerTitle: bot.header_title || 'Support Assistant',
@@ -126,7 +126,7 @@ app.get('/api/bots/:botId/settings', async (req, res) => {
       userMessageBg: bot.user_message_bg || '#3b82f6',
       botMessageBg: bot.bot_message_bg || '#f3f4f6',
       sendButtonBg: bot.send_button_bg || '#3b82f6',
-      leadFormMessage: bot.lead_form_message || 'Want personalized help? Leave your details and we\'ll follow up'
+      leadFormMessage: bot.lead_form_message || "Want personalized help? Leave your details and we'll follow up"
     });
   } catch (error) {
     console.error('Get bot settings error:', error);
