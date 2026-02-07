@@ -32,6 +32,7 @@ router.get('/:customerId', async (req, res) => {
   try {
     const customerId = requestedCustomerId;
     const selectedBotId = parseInt(req.query.bot) || null;
+    const activeTab = req.query.tab || 'overview';
     
     // Get customer info
     const customerResult = await query(
@@ -164,6 +165,11 @@ router.get('/:customerId', async (req, res) => {
       date: new Date(msg.created_at).toLocaleString()
     }));
 
+    // Generate bot initials for avatar
+    const getBotInitials = (name) => {
+      return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+    };
+
     // Render dashboard HTML
     res.send(`
       <!DOCTYPE html>
@@ -171,274 +177,584 @@ router.get('/:customerId', async (req, res) => {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Auto Reply Chat Dashboard</title>
+        <title>${currentBot.name} - AutoReplyChat</title>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
           
           body { 
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f3f4f6;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+            display: flex;
+            min-height: 100vh;
           }
           
-          .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 20px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+          /* Bot Sidebar - Far Left */
+          .bot-sidebar {
+            width: 72px;
+            background: #1e293b;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 16px 0;
+            gap: 12px;
           }
           
-          .header h1 { font-size: 24px; }
-          .header p { opacity: 0.9; margin-top: 5px; }
-          
-          .container { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
-          
-          .bot-selector {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-            margin-bottom: 20px;
+          .bot-sidebar-logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            border-radius: 12px;
             display: flex;
             align-items: center;
-            gap: 15px;
-            flex-wrap: wrap;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 16px;
+            margin-bottom: 20px;
           }
           
-          .bot-selector label {
+          .bot-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s;
             font-weight: 600;
-            color: #374151;
-          }
-          
-          .bot-selector select {
-            padding: 10px 15px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
             font-size: 14px;
-            min-width: 200px;
+            background: #334155;
+            color: #94a3b8;
+            border: 2px solid transparent;
           }
           
-          .bot-selector button {
-            padding: 10px 20px;
+          .bot-icon:hover {
+            background: #475569;
+            color: white;
           }
           
-          .bot-selector .delete-btn {
-            background: #ef4444;
+          .bot-icon.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #60a5fa;
           }
           
-          .bot-selector .delete-btn:hover {
-            background: #dc2626;
+          .bot-icon-add {
+            background: transparent;
+            border: 2px dashed #475569;
+            color: #64748b;
           }
           
-          .stats {
+          .bot-icon-add:hover {
+            border-color: #3b82f6;
+            color: #3b82f6;
+            background: rgba(59, 130, 246, 0.1);
+          }
+          
+          /* Navigation Sidebar */
+          .nav-sidebar {
+            width: 240px;
+            background: white;
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+          }
+          
+          .nav-header {
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          
+          .nav-header h2 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          
+          .nav-header p {
+            font-size: 12px;
+            color: #64748b;
+          }
+          
+          .nav-section {
+            padding: 16px 12px 8px;
+          }
+          
+          .nav-section-title {
+            font-size: 11px;
+            font-weight: 600;
+            color: #94a3b8;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            padding: 0 8px;
+            margin-bottom: 8px;
+          }
+          
+          .nav-menu {
+            list-style: none;
+          }
+          
+          .nav-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.15s;
+            font-size: 14px;
+            font-weight: 500;
+            color: #64748b;
+            margin-bottom: 2px;
+          }
+          
+          .nav-item:hover {
+            background: #f1f5f9;
+            color: #1e293b;
+          }
+          
+          .nav-item.active {
+            background: #eff6ff;
+            color: #3b82f6;
+          }
+          
+          .nav-item svg {
+            width: 20px;
+            height: 20px;
+            flex-shrink: 0;
+          }
+          
+          .nav-footer {
+            margin-top: auto;
+            padding: 16px;
+            border-top: 1px solid #e2e8f0;
+          }
+          
+          .user-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 8px;
+            border-radius: 8px;
+            cursor: pointer;
+          }
+          
+          .user-info:hover {
+            background: #f1f5f9;
+          }
+          
+          .user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 600;
+            font-size: 14px;
+          }
+          
+          .user-details {
+            flex: 1;
+            min-width: 0;
+          }
+          
+          .user-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1e293b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          
+          .user-email {
+            font-size: 12px;
+            color: #64748b;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }
+          
+          /* Main Content */
+          .main-content {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+          }
+          
+          .main-header {
+            background: white;
+            border-bottom: 1px solid #e2e8f0;
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          
+          .main-header h1 {
+            font-size: 20px;
+            font-weight: 600;
+            color: #1e293b;
+          }
+          
+          .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+          }
+          
+          .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.15s;
+            border: none;
+          }
+          
+          .btn-primary {
+            background: #3b82f6;
+            color: white;
+          }
+          
+          .btn-primary:hover {
+            background: #2563eb;
+          }
+          
+          .btn-secondary {
+            background: white;
+            color: #1e293b;
+            border: 1px solid #e2e8f0;
+          }
+          
+          .btn-secondary:hover {
+            background: #f8fafc;
+            border-color: #cbd5e1;
+          }
+          
+          .btn-danger {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+          }
+          
+          .btn-danger:hover {
+            background: #fee2e2;
+          }
+          
+          .main-body {
+            flex: 1;
+            overflow-y: auto;
+            padding: 32px;
+          }
+          
+          /* Stats Grid */
+          .stats-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            grid-template-columns: repeat(4, 1fr);
             gap: 20px;
-            margin-bottom: 30px;
+            margin-bottom: 32px;
           }
           
           .stat-card {
             background: white;
+            border-radius: 12px;
             padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            border: 1px solid #e2e8f0;
           }
           
-          .stat-card h3 { color: #6b7280; font-size: 14px; margin-bottom: 10px; }
-          .stat-card .number { font-size: 36px; font-weight: bold; color: #1f2937; }
-          
-          .tabs {
-            background: white;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-          }
-          
-          .tab-buttons {
+          .stat-card-header {
             display: flex;
-            border-bottom: 1px solid #e5e7eb;
-            overflow-x: auto;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
           }
           
-          .tab-button {
-            flex: 0 0 auto;
-            padding: 15px 20px;
-            background: none;
-            border: none;
-            cursor: pointer;
+          .stat-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+          
+          .stat-icon.blue { background: #eff6ff; color: #3b82f6; }
+          .stat-icon.green { background: #f0fdf4; color: #22c55e; }
+          .stat-icon.purple { background: #faf5ff; color: #a855f7; }
+          .stat-icon.orange { background: #fff7ed; color: #f97316; }
+          
+          .stat-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 4px;
+          }
+          
+          .stat-label {
+            font-size: 13px;
+            color: #64748b;
+          }
+          
+          /* Content Cards */
+          .content-card {
+            background: white;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+            margin-bottom: 24px;
+          }
+          
+          .content-card-header {
+            padding: 20px;
+            border-bottom: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+          }
+          
+          .content-card-header h3 {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1e293b;
+          }
+          
+          .content-card-body {
+            padding: 20px;
+          }
+          
+          /* Forms */
+          .form-group {
+            margin-bottom: 20px;
+          }
+          
+          .form-label {
+            display: block;
             font-size: 14px;
             font-weight: 500;
-            color: #6b7280;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-            white-space: nowrap;
+            color: #374151;
+            margin-bottom: 6px;
           }
           
-          .tab-button:hover { background: #f9fafb; }
-          
-          .tab-button.active {
-            color: #667eea;
-            border-bottom-color: #667eea;
-          }
-          
-          .tab-content {
-            padding: 20px;
-            display: none;
-          }
-          
-          .tab-content.active { display: block; }
-          
-          .upload-area {
-            border: 2px dashed #d1d5db;
+          .form-input {
+            width: 100%;
+            padding: 10px 14px;
+            border: 1px solid #e2e8f0;
             border-radius: 8px;
+            font-size: 14px;
+            transition: all 0.15s;
+          }
+          
+          .form-input:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+          }
+          
+          .form-textarea {
+            min-height: 120px;
+            resize: vertical;
+          }
+          
+          .form-help {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 6px;
+          }
+          
+          /* Upload Area */
+          .upload-area {
+            border: 2px dashed #e2e8f0;
+            border-radius: 12px;
             padding: 40px;
             text-align: center;
-            margin-bottom: 20px;
             cursor: pointer;
             transition: all 0.2s;
           }
           
           .upload-area:hover {
-            border-color: #667eea;
-            background: #f9fafb;
+            border-color: #3b82f6;
+            background: #f8fafc;
           }
           
-          .form-group {
-            margin-bottom: 20px;
-          }
-          
-          label {
-            display: block;
-            font-weight: 500;
-            margin-bottom: 8px;
-            color: #374151;
-          }
-          
-          input, textarea {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            font-size: 14px;
-          }
-          
-          textarea { min-height: 150px; resize: vertical; }
-          
-          button {
-            background: #667eea;
-            color: white;
-            padding: 12px 24px;
-            border: none;
-            border-radius: 6px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: background 0.2s;
-          }
-          
-          button:hover { background: #5568d3; }
-          
-          .document-list, .lead-list {
-            list-style: none;
-          }
-          
-          .document-item, .lead-item {
-            padding: 15px;
-            border-bottom: 1px solid #e5e7eb;
+          .upload-icon {
+            width: 48px;
+            height: 48px;
+            background: #eff6ff;
+            border-radius: 12px;
             display: flex;
-            justify-content: space-between;
             align-items: center;
+            justify-content: center;
+            margin: 0 auto 16px;
+            color: #3b82f6;
           }
           
-          .document-item:last-child, .lead-item:last-child { border-bottom: none; }
-          
-          .document-title { font-weight: 500; color: #1f2937; }
-          .document-meta { font-size: 13px; color: #6b7280; margin-top: 4px; }
-          
-          .qa-item {
-            padding: 20px;
-            border-bottom: 1px solid #e5e7eb;
-            background: #f9fafb;
-            margin-bottom: 10px;
-            border-radius: 8px;
+          .upload-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: #1e293b;
+            margin-bottom: 4px;
           }
           
-          .qa-question {
-            font-weight: 600;
-            color: #667eea;
-            font-size: 16px;
-            margin-bottom: 12px;
+          .upload-subtitle {
+            font-size: 13px;
+            color: #64748b;
           }
           
-          .qa-answer {
-            color: #1f2937;
-            line-height: 1.6;
-            padding-left: 20px;
-            margin-bottom: 12px;
+          /* Lists */
+          .list-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 0;
+            border-bottom: 1px solid #f1f5f9;
           }
           
-          .download-buttons {
+          .list-item:last-child {
+            border-bottom: none;
+          }
+          
+          .list-item-info {
+            flex: 1;
+            min-width: 0;
+          }
+          
+          .list-item-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #1e293b;
+            margin-bottom: 2px;
+          }
+          
+          .list-item-meta {
+            font-size: 13px;
+            color: #64748b;
+          }
+          
+          .list-item-actions {
             display: flex;
             gap: 8px;
-            flex-wrap: wrap;
           }
           
-          .download-btn {
-            background: #1e3a8a;
-            color: white;
-            padding: 6px 14px;
-            border: none;
-            border-radius: 20px;
+          .badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 4px 10px;
+            border-radius: 6px;
             font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            white-space: nowrap;
+            font-weight: 500;
           }
           
-          .download-btn:hover {
-            background: #1e40af;
-            transform: translateY(-1px);
+          .badge-blue { background: #eff6ff; color: #3b82f6; }
+          .badge-green { background: #f0fdf4; color: #22c55e; }
+          .badge-gray { background: #f1f5f9; color: #64748b; }
+          
+          /* Messages */
+          .message-item {
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 12px;
           }
           
-          .download-btn.youtube { background: #FF0000; }
-          .download-btn.youtube:hover { background: #cc0000; }
-          .download-btn.pdf { background: #1e3a8a; }
-          .download-btn.word { background: #2563eb; }
-          .download-btn.csv { background: #10b981; }
-          
-          .success-message {
-            background: #d1fae5;
-            color: #065f46;
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            display: none;
+          .message-item.user {
+            background: #f1f5f9;
           }
           
-          .error-message {
-            background: #fee2e2;
-            color: #991b1b;
-            padding: 12px;
-            border-radius: 6px;
-            margin-bottom: 20px;
-            display: none;
+          .message-item.assistant {
+            background: #eff6ff;
           }
           
-          .website-controls {
+          .message-header {
             display: flex;
-            gap: 10px;
-            margin-bottom: 15px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
           }
           
-          .website-controls button {
-            flex: 0 0 auto;
-            padding: 10px 20px;
+          .message-author {
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e293b;
           }
           
-          .website-controls button.active {
-            background: #10b981;
+          .message-time {
+            font-size: 12px;
+            color: #94a3b8;
           }
           
-          .modal {
+          .message-content {
+            font-size: 14px;
+            color: #374151;
+            line-height: 1.6;
+          }
+          
+          /* Embed Code */
+          .embed-section {
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 24px;
+            margin-bottom: 20px;
+          }
+          
+          .embed-section h4 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+          }
+          
+          .embed-section p {
+            font-size: 13px;
+            color: #64748b;
+            margin-bottom: 16px;
+          }
+          
+          .code-block {
+            background: #1e293b;
+            border-radius: 8px;
+            padding: 16px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 13px;
+            color: #e2e8f0;
+            overflow-x: auto;
+            white-space: pre-wrap;
+            word-break: break-all;
+          }
+          
+          .copy-row {
+            display: flex;
+            gap: 12px;
+            margin-top: 12px;
+          }
+          
+          .copy-input {
+            flex: 1;
+            padding: 12px 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            font-size: 14px;
+            background: white;
+          }
+          
+          /* Modal */
+          .modal-overlay {
             display: none;
             position: fixed;
             top: 0;
@@ -451,391 +767,557 @@ router.get('/:customerId', async (req, res) => {
             justify-content: center;
           }
           
-          .modal.show { display: flex; }
-          
-          .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 8px;
-            max-width: 400px;
-            width: 90%;
-          }
-          
-          .modal-content h2 { margin-bottom: 20px; }
-          
-          .modal-buttons {
+          .modal-overlay.show {
             display: flex;
-            gap: 10px;
-            margin-top: 20px;
           }
           
-          .modal-buttons button { flex: 1; }
-          
-          .cancel-btn {
-            background: #6b7280;
+          .modal {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            max-width: 440px;
+            width: 90%;
+            box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
           }
           
-          .cancel-btn:hover {
-            background: #4b5563;
+          .modal h3 {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 8px;
           }
           
-          .embed-section {
-            background: #f9fafb;
-            padding: 20px;
-            border-radius: 8px;
+          .modal p {
+            font-size: 14px;
+            color: #64748b;
             margin-bottom: 20px;
           }
           
-          .embed-section h3 {
-            margin-bottom: 10px;
-            font-size: 16px;
-          }
-          
-          .embed-section p {
-            color: #6b7280;
-            margin-bottom: 15px;
-            font-size: 14px;
-          }
-          
-          .embed-input-row {
+          .modal-actions {
             display: flex;
-            gap: 10px;
-            align-items: center;
+            gap: 12px;
+            justify-content: flex-end;
           }
           
-          .embed-input-row input {
+          /* Success/Error Messages */
+          .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            display: none;
+          }
+          
+          .alert-success {
+            background: #f0fdf4;
+            color: #15803d;
+            border: 1px solid #bbf7d0;
+          }
+          
+          .alert-error {
+            background: #fef2f2;
+            color: #dc2626;
+            border: 1px solid #fecaca;
+          }
+          
+          /* Tab Content */
+          .tab-panel {
+            display: none;
+          }
+          
+          .tab-panel.active {
+            display: block;
+          }
+          
+          /* Scrollbar Styling */
+          ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+          }
+          
+          ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+          }
+          
+          ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+          }
+          
+          ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+          }
+          
+          /* Website Controls */
+          .toggle-group {
+            display: flex;
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 4px;
+            margin-bottom: 16px;
+          }
+          
+          .toggle-btn {
             flex: 1;
-            padding: 12px;
-            font-family: monospace;
-            background: white;
-            border: 1px solid #d1d5db;
+            padding: 8px 16px;
+            border: none;
+            background: transparent;
             border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.15s;
           }
           
-          .embed-input-row button {
-            padding: 12px 20px;
-            white-space: nowrap;
-          }
-          
-          .embed-code {
-            font-family: monospace;
+          .toggle-btn.active {
             background: white;
-            padding: 12px;
-            border: 1px solid #d1d5db;
-            border-radius: 6px;
-            width: 100%;
-            min-height: 100px;
-            resize: vertical;
+            color: #1e293b;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
           }
           
-          .copy-btn {
-            margin-top: 10px;
+          /* Responsive */
+          @media (max-width: 1200px) {
+            .stats-grid {
+              grid-template-columns: repeat(2, 1fr);
+            }
+          }
+          
+          @media (max-width: 768px) {
+            .nav-sidebar {
+              display: none;
+            }
+            .stats-grid {
+              grid-template-columns: 1fr;
+            }
           }
         </style>
       </head>
       <body>
-        <div class="header">
-          <h1>🤖 Auto Reply Chat Dashboard</h1>
-          <p style="display: flex; justify-content: space-between; align-items: center;">
-            <span>Welcome back, ${customer.name}!</span>
-            <button onclick="fetch('/api/auth/logout', {method:'POST'}).then(()=>window.location='/login')" 
-              style="background: rgba(255,255,255,0.2); padding: 8px 16px; border-radius: 6px; font-size: 13px; border: 1px solid rgba(255,255,255,0.3);">
-              Logout
-            </button>
-          </p>
+        <!-- Bot Sidebar -->
+        <div class="bot-sidebar">
+          <div class="bot-sidebar-logo">AC</div>
+          ${bots.map(bot => `
+            <div class="bot-icon ${bot.id === botId ? 'active' : ''}" 
+                 onclick="switchBot(${bot.id})" 
+                 title="${bot.name}">
+              ${getBotInitials(bot.name)}
+            </div>
+          `).join('')}
+          <div class="bot-icon bot-icon-add" onclick="showCreateBotModal()" title="Create new bot">
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+            </svg>
+          </div>
         </div>
         
-        <div class="container">
-          <!-- Bot Selector -->
-          <div class="bot-selector">
-            <label for="botSelect">Select Bot:</label>
-            <select id="botSelect" onchange="switchBot(this.value)">
-              ${bots.map(bot => `
-                <option value="${bot.id}" ${bot.id === botId ? 'selected' : ''}>${bot.name}</option>
-              `).join('')}
-            </select>
-            <button onclick="showCreateBotModal()">+ New Bot</button>
-            ${bots.length > 1 ? `<button class="delete-btn" onclick="showDeleteBotModal()">Delete Bot</button>` : ''}
+        <!-- Navigation Sidebar -->
+        <div class="nav-sidebar">
+          <div class="nav-header">
+            <h2>${currentBot.name}</h2>
+            <p>Bot ID: ${botId}</p>
           </div>
           
-          <div class="stats">
-            <div class="stat-card">
-              <h3>Documents</h3>
-              <div class="number">${documentCount}</div>
+          <div class="nav-section">
+            <div class="nav-section-title">Overview</div>
+            <ul class="nav-menu">
+              <li class="nav-item ${activeTab === 'overview' ? 'active' : ''}" onclick="switchTab('overview')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z"/></svg>
+                Dashboard
+              </li>
+            </ul>
+          </div>
+          
+          <div class="nav-section">
+            <div class="nav-section-title">Training Data</div>
+            <ul class="nav-menu">
+              <li class="nav-item ${activeTab === 'upload' ? 'active' : ''}" onclick="switchTab('upload')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                Upload Content
+              </li>
+              <li class="nav-item ${activeTab === 'documents' ? 'active' : ''}" onclick="switchTab('documents')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                Documents
+              </li>
+              <li class="nav-item ${activeTab === 'qa' ? 'active' : ''}" onclick="switchTab('qa')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                Q&A Pairs
+              </li>
+            </ul>
+          </div>
+          
+          <div class="nav-section">
+            <div class="nav-section-title">Activity</div>
+            <ul class="nav-menu">
+              <li class="nav-item ${activeTab === 'leads' ? 'active' : ''}" onclick="switchTab('leads')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                Leads
+              </li>
+              <li class="nav-item ${activeTab === 'messages' ? 'active' : ''}" onclick="switchTab('messages')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                Messages
+              </li>
+            </ul>
+          </div>
+          
+          <div class="nav-section">
+            <div class="nav-section-title">Settings</div>
+            <ul class="nav-menu">
+              <li class="nav-item ${activeTab === 'behavior' ? 'active' : ''}" onclick="switchTab('behavior')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                Bot Behavior
+              </li>
+              <li class="nav-item ${activeTab === 'deploy' ? 'active' : ''}" onclick="switchTab('deploy')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
+                Deploy
+              </li>
+            </ul>
+          </div>
+          
+          <div class="nav-footer">
+            <div class="user-info" onclick="document.getElementById('userMenu').classList.toggle('show')">
+              <div class="user-avatar">${customer.name.charAt(0).toUpperCase()}</div>
+              <div class="user-details">
+                <div class="user-name">${customer.name}</div>
+                <div class="user-email">${customer.email}</div>
+              </div>
             </div>
-            <div class="stat-card">
-              <h3>Leads Captured</h3>
-              <div class="number">${leadCount}</div>
-            </div>
-            <div class="stat-card">
-              <h3>Messages</h3>
-              <div class="number">${messageCount}</div>
-            </div>
-            <div class="stat-card">
-              <h3>Total Bots</h3>
-              <div class="number">${bots.length}</div>
+            <button onclick="logout()" class="btn btn-secondary" style="width: 100%; margin-top: 12px;">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+              Sign Out
+            </button>
+          </div>
+        </div>
+        
+        <!-- Main Content -->
+        <div class="main-content">
+          <div class="main-header">
+            <h1 id="pageTitle">Dashboard</h1>
+            <div class="header-actions">
+              ${bots.length > 1 ? `<button class="btn btn-danger" onclick="showDeleteBotModal()">Delete Bot</button>` : ''}
             </div>
           </div>
           
-          <div class="tabs">
-            <div class="tab-buttons">
-              <button class="tab-button active" onclick="switchTab('upload')">Upload Content</button>
-              <button class="tab-button" onclick="switchTab('documents')">My Documents</button>
-              <button class="tab-button" onclick="switchTab('qa')">Q&A Pairs</button>
-              <button class="tab-button" onclick="switchTab('leads')">Leads</button>
-              <button class="tab-button" onclick="switchTab('messages')">Messages</button>
-              <button class="tab-button" onclick="switchTab('embed')">Deploy</button>
-            </div>
+          <div class="main-body">
+            <div id="alert-success" class="alert alert-success"></div>
+            <div id="alert-error" class="alert alert-error"></div>
             
-            <!-- Upload Content Tab -->
-            <div id="upload-tab" class="tab-content active">
-              <h2 style="margin-bottom: 20px;">Upload Training Content for "${currentBot.name}"</h2>
-              <p style="color: #6b7280; margin-bottom: 20px;">Add content for your chatbot to learn from. The more context you provide, the better it will answer questions.</p>
+            <!-- Overview Tab -->
+            <div id="tab-overview" class="tab-panel active">
+              <div class="stats-grid">
+                <div class="stat-card">
+                  <div class="stat-card-header">
+                    <div class="stat-icon blue">
+                      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                    </div>
+                  </div>
+                  <div class="stat-value">${documentCount}</div>
+                  <div class="stat-label">Documents</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-card-header">
+                    <div class="stat-icon green">
+                      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+                    </div>
+                  </div>
+                  <div class="stat-value">${leadCount}</div>
+                  <div class="stat-label">Leads Captured</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-card-header">
+                    <div class="stat-icon purple">
+                      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+                    </div>
+                  </div>
+                  <div class="stat-value">${messageCount}</div>
+                  <div class="stat-label">Messages</div>
+                </div>
+                <div class="stat-card">
+                  <div class="stat-card-header">
+                    <div class="stat-icon orange">
+                      <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                    </div>
+                  </div>
+                  <div class="stat-value">${bots.length}</div>
+                  <div class="stat-label">Total Bots</div>
+                </div>
+              </div>
               
-              <div id="success-message" class="success-message"></div>
-              <div id="error-message" class="error-message"></div>
-              
-              <h3 style="margin-bottom: 15px;">Upload Files</h3>
-              <div class="upload-area" onclick="document.getElementById('fileInput').click()">
-                <div style="font-size: 48px; margin-bottom: 10px;">📄</div>
-                <p><strong>Click to browse</strong> or drag and drop files here</p>
-                <p style="color: #6b7280; font-size: 13px; margin-top: 8px;">Supports: PDF, Word (.docx), Text (.txt), CSV</p>
-                <p style="color: #6b7280; font-size: 13px;">Max file size: 20MB</p>
-              </div>
-              <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.txt,.csv" multiple onchange="handleFileUpload(event)">
-              
-              <h3 style="margin: 30px 0 15px;">Train from Website</h3>
-              <p style="color: #6b7280; margin-bottom: 15px;">Enter a website URL and choose how to scrape it.</p>
-              <div class="website-controls">
-                <button id="fullWebsiteBtn" class="active" onclick="setWebsiteMode('full')">Full Website</button>
-                <button id="singlePageBtn" onclick="setWebsiteMode('single')">Single Page</button>
-              </div>
-              <div class="form-group">
-                <input type="url" id="websiteUrl" placeholder="https://example.com" />
-              </div>
-              <button onclick="handleWebsiteScrape()">Start Scraping</button>
-              
-              <h3 style="margin: 30px 0 15px;">Train from YouTube</h3>
-              <p style="color: #6b7280; margin-bottom: 15px;">Extract transcript from any YouTube video with captions.</p>
-              <div class="form-group">
-                <input type="url" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." />
-              </div>
-              <button style="background: #FF0000;" onmouseover="this.style.background='#cc0000'" onmouseout="this.style.background='#FF0000'" onclick="handleYoutubeTranscript()">Extract Transcript</button>
-              
-              <h3 style="margin: 30px 0 15px;">Or Paste Text</h3>
-              <div class="form-group">
-                <label for="textTitle">Document title (e.g., "Product Information", "FAQ")</label>
-                <input type="text" id="textTitle" placeholder="Product Information" />
-              </div>
-              <div class="form-group">
-                <label for="textContent">Paste your content here...</label>
-                <textarea id="textContent" placeholder="Examples:
-- Company information
-- Product/service descriptions
-- Pricing information
-- FAQ
-- Contact information"></textarea>
-              </div>
-              <button onclick="handleTextUpload()">Upload Text</button>
-              
-              <h3 style="margin: 30px 0 15px;">Train with Q&A Pairs</h3>
-              <p style="color: #6b7280; margin-bottom: 15px;">Add specific question-answer pairs to train your chatbot on exact responses.</p>
-              <div class="form-group">
-                <label for="qaQuestion">Question</label>
-                <input type="text" id="qaQuestion" placeholder="e.g., What are your business hours?" />
-              </div>
-              <div class="form-group">
-                <label for="qaAnswer">Answer</label>
-                <textarea id="qaAnswer" placeholder="We're open Monday-Friday, 9am-5pm EST."></textarea>
-              </div>
-              <button onclick="handleQAUpload()">Add Q&A Pair</button>
-              
-              <h3 style="margin: 30px 0 15px;">Configure Bot Behavior</h3>
-              <p style="color: #6b7280; margin-bottom: 15px;">Set instructions for how your chatbot should respond - its tone, personality, who it represents, and any specific guidelines.</p>
-              <div class="form-group">
-                <label for="botInstructions">Bot Instructions</label>
-                <textarea id="botInstructions" style="min-height: 200px;" placeholder="Example:
-You are a friendly customer support assistant for XYZ Company.
-
-- Always be professional but warm
-- Answer questions about our products and services
-- If you don't know something, direct them to contact us at support@xyz.com
-- Use a helpful, conversational tone
-- Keep responses concise (2-3 paragraphs max)">${botInstructions}</textarea>
-              </div>
-              <button onclick="handleBotInstructionsUpdate()">Save Bot Instructions</button>
-              
-              <h3 style="margin: 30px 0 15px;">Greeting Message</h3>
-              <p style="color: #6b7280; margin-bottom: 15px;">The message shown in the greeting bubble when visitors first see the chatbot.</p>
-              <div class="form-group">
-                <label for="greetingMessage">Greeting Message</label>
-                <input type="text" id="greetingMessage" value="${greetingMessage}" placeholder="Thank you for visiting! How may we assist you today?" />
-              </div>
-              <button onclick="handleGreetingUpdate()">Save Greeting</button>
-            </div>
-            
-            <!-- My Documents Tab -->
-            <div id="documents-tab" class="tab-content">
-              <h2 style="margin-bottom: 20px;">My Documents</h2>
-              ${documents.length > 0 ? `
-                <ul class="document-list">
-                  ${documents.map(doc => `
-                    <li class="document-item">
-                      <div>
-                        <div class="document-title">${doc.title}</div>
-                        <div class="document-meta">${doc.type} • ${doc.date}</div>
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Recent Activity</h3>
+                </div>
+                <div class="content-card-body">
+                  ${messages.length > 0 ? messages.slice(0, 5).map(msg => `
+                    <div class="list-item">
+                      <div class="list-item-info">
+                        <div class="list-item-title">${msg.role === 'user' ? '👤' : '🤖'} ${msg.content.substring(0, 60)}${msg.content.length > 60 ? '...' : ''}</div>
+                        <div class="list-item-meta">${msg.leadName} • ${msg.date}</div>
                       </div>
-                      <div class="download-buttons">
-                        <button class="download-btn pdf" onclick="downloadDocument(${doc.id}, 'pdf')">PDF</button>
-                        <button class="download-btn word" onclick="downloadDocument(${doc.id}, 'docx')">Word Doc</button>
-                        <button class="download-btn csv" onclick="downloadDocument(${doc.id}, 'csv')">Excel/Csv</button>
-                        <button class="download-btn youtube" onclick="downloadDocument(${doc.id}, 'txt')">Youtube</button>
-                      </div>
-                    </li>
-                  `).join('')}
-                </ul>
-              ` : '<p style="color: #6b7280;">No documents yet. Upload some content to get started!</p>'}
+                      <span class="badge badge-${msg.role === 'user' ? 'blue' : 'green'}">${msg.role}</span>
+                    </div>
+                  `).join('') : '<p style="color: #64748b; text-align: center; padding: 20px;">No recent activity</p>'}
+                </div>
+              </div>
             </div>
             
-            <!-- Q&A Pairs Tab -->
-            <div id="qa-tab" class="tab-content">
-              <h2 style="margin-bottom: 20px;">Q&A Training Pairs</h2>
-              ${qaPairs.length > 0 ? `
-                <div style="max-height: 600px; overflow-y: auto;">
-                  ${qaPairs.map(qa => {
+            <!-- Upload Tab -->
+            <div id="tab-upload" class="tab-panel">
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Upload Files</h3>
+                </div>
+                <div class="content-card-body">
+                  <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                    <div class="upload-icon">
+                      <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                    </div>
+                    <div class="upload-title">Click to upload or drag and drop</div>
+                    <div class="upload-subtitle">PDF, Word, Text, CSV (max 20MB)</div>
+                  </div>
+                  <input type="file" id="fileInput" style="display: none;" accept=".pdf,.docx,.txt,.csv" multiple onchange="handleFileUpload(event)">
+                </div>
+              </div>
+              
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Import from Website</h3>
+                </div>
+                <div class="content-card-body">
+                  <div class="toggle-group">
+                    <button id="fullWebsiteBtn" class="toggle-btn active" onclick="setWebsiteMode('full')">Full Website</button>
+                    <button id="singlePageBtn" class="toggle-btn" onclick="setWebsiteMode('single')">Single Page</button>
+                  </div>
+                  <div class="form-group">
+                    <input type="url" id="websiteUrl" class="form-input" placeholder="https://example.com" />
+                  </div>
+                  <button class="btn btn-primary" onclick="handleWebsiteScrape()">Start Scraping</button>
+                </div>
+              </div>
+              
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Import from YouTube</h3>
+                </div>
+                <div class="content-card-body">
+                  <div class="form-group">
+                    <input type="url" id="youtubeUrl" class="form-input" placeholder="https://www.youtube.com/watch?v=..." />
+                  </div>
+                  <button class="btn btn-primary" style="background: #dc2626;" onclick="handleYoutubeTranscript()">Extract Transcript</button>
+                </div>
+              </div>
+              
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Add Text Content</h3>
+                </div>
+                <div class="content-card-body">
+                  <div class="form-group">
+                    <label class="form-label">Title</label>
+                    <input type="text" id="textTitle" class="form-input" placeholder="e.g., Product Information, FAQ" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Content</label>
+                    <textarea id="textContent" class="form-input form-textarea" placeholder="Paste your content here..."></textarea>
+                  </div>
+                  <button class="btn btn-primary" onclick="handleTextUpload()">Upload Text</button>
+                </div>
+              </div>
+              
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Add Q&A Pair</h3>
+                </div>
+                <div class="content-card-body">
+                  <div class="form-group">
+                    <label class="form-label">Question</label>
+                    <input type="text" id="qaQuestion" class="form-input" placeholder="e.g., What are your business hours?" />
+                  </div>
+                  <div class="form-group">
+                    <label class="form-label">Answer</label>
+                    <textarea id="qaAnswer" class="form-input form-textarea" placeholder="We're open Monday-Friday, 9am-5pm."></textarea>
+                  </div>
+                  <button class="btn btn-primary" onclick="handleQAUpload()">Add Q&A Pair</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Documents Tab -->
+            <div id="tab-documents" class="tab-panel">
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Training Documents</h3>
+                </div>
+                <div class="content-card-body">
+                  ${documents.length > 0 ? documents.map(doc => `
+                    <div class="list-item">
+                      <div class="list-item-info">
+                        <div class="list-item-title">${doc.title}</div>
+                        <div class="list-item-meta">${doc.type} • ${doc.date}</div>
+                      </div>
+                      <div class="list-item-actions">
+                        <span class="badge badge-gray">${doc.type}</span>
+                      </div>
+                    </div>
+                  `).join('') : '<p style="color: #64748b; text-align: center; padding: 40px;">No documents yet. Upload content to get started.</p>'}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Q&A Tab -->
+            <div id="tab-qa" class="tab-panel">
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Q&A Training Pairs</h3>
+                </div>
+                <div class="content-card-body">
+                  ${qaPairs.length > 0 ? qaPairs.map(qa => {
                     const lines = qa.content.split('\n').filter(l => l.trim());
                     const question = lines[0]?.replace('Q: ', '') || '';
                     const answer = lines.find(l => l.startsWith('A: '))?.replace('A: ', '') || '';
-                    
                     return `
-                      <div class="qa-item">
-                        <div class="qa-question">Q: ${question}</div>
-                        <div class="qa-answer">A: ${answer}</div>
-                        <div style="display: flex; justify-content: space-between; align-items: center;">
-                          <div class="document-meta">${qa.date}</div>
-                          <div class="download-buttons">
-                            <button class="download-btn pdf" onclick="downloadDocument(${qa.id}, 'pdf')">PDF</button>
-                            <button class="download-btn word" onclick="downloadDocument(${qa.id}, 'docx')">Word</button>
-                            <button class="download-btn csv" onclick="downloadDocument(${qa.id}, 'csv')">CSV</button>
-                            <button class="download-btn youtube" onclick="downloadDocument(${qa.id}, 'txt')">TXT</button>
-                          </div>
-                        </div>
+                      <div class="list-item" style="flex-direction: column; align-items: flex-start;">
+                        <div style="font-weight: 600; color: #3b82f6; margin-bottom: 8px;">Q: ${question}</div>
+                        <div style="color: #374151; line-height: 1.6;">A: ${answer}</div>
+                        <div class="list-item-meta" style="margin-top: 8px;">${qa.date}</div>
                       </div>
                     `;
-                  }).join('')}
+                  }).join('') : '<p style="color: #64748b; text-align: center; padding: 40px;">No Q&A pairs yet. Add some in Upload Content.</p>'}
                 </div>
-              ` : '<p style="color: #6b7280;">No Q&A pairs yet. Add some in the Upload Content tab!</p>'}
+              </div>
             </div>
             
             <!-- Leads Tab -->
-            <div id="leads-tab" class="tab-content">
-              <h2 style="margin-bottom: 20px;">Captured Leads</h2>
-              ${leads.length > 0 ? `
-                <ul class="lead-list">
-                  ${leads.map(lead => `
-                    <li class="lead-item">
-                      <div>
-                        <div class="document-title">${lead.name}</div>
-                        <div class="document-meta">${lead.email} • ${lead.date}</div>
-                      </div>
-                    </li>
-                  `).join('')}
-                </ul>
-              ` : '<p style="color: #6b7280;">No leads captured yet.</p>'}
-            </div>
-
-            <!-- Messages Tab -->
-            <div id="messages-tab" class="tab-content">
-              <h2 style="margin-bottom: 20px;">Chat Messages</h2>
-              ${messages.length > 0 ? `
-                <div style="max-height: 600px; overflow-y: auto;">
-                  ${messages.map(msg => `
-                    <div style="padding: 15px; border-bottom: 1px solid #e5e7eb; background: ${msg.role === 'user' ? '#f9fafb' : '#eff6ff'};">
-                      <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
-                        <div>
-                          <span style="font-weight: 600; color: ${msg.role === 'user' ? '#1f2937' : '#2563eb'};">
-                            ${msg.role === 'user' ? '👤 User' : '🤖 Assistant'}
-                          </span>
-                          <span style="color: #6b7280; font-size: 13px; margin-left: 10px;">
-                            ${msg.leadName}${msg.leadEmail ? ` (${msg.leadEmail})` : ''}
-                          </span>
-                        </div>
-                        <span style="color: #6b7280; font-size: 12px;">${msg.date}</span>
-                      </div>
-                      <div style="color: #1f2937; line-height: 1.6;">
-                        ${msg.content}
-                      </div>
-                    </div>
-                  `).join('')}
+            <div id="tab-leads" class="tab-panel">
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Captured Leads</h3>
                 </div>
-              ` : '<p style="color: #6b7280;">No messages yet.</p>'}
+                <div class="content-card-body">
+                  ${leads.length > 0 ? leads.map(lead => `
+                    <div class="list-item">
+                      <div class="list-item-info">
+                        <div class="list-item-title">${lead.name}</div>
+                        <div class="list-item-meta">${lead.email} • ${lead.date}</div>
+                      </div>
+                      <span class="badge badge-green">New</span>
+                    </div>
+                  `).join('') : '<p style="color: #64748b; text-align: center; padding: 40px;">No leads captured yet.</p>'}
+                </div>
+              </div>
             </div>
             
-            <!-- Deploy / Embed Code Tab -->
-            <div id="embed-tab" class="tab-content">
-              <h2 style="margin-bottom: 20px;">Deploy "${currentBot.name}"</h2>
-              
-              <!-- Direct Link -->
-              <div class="embed-section">
-                <h3>🔗 Direct Link</h3>
-                <p>Share this link to let users access your chatbot directly.</p>
-                <div class="embed-input-row">
-                  <input type="text" readonly value="https://autoreplychat.com/chat/${botId}" onclick="this.select()" />
-                  <button onclick="copyToClipboard('https://autoreplychat.com/chat/${botId}')">Copy Link</button>
+            <!-- Messages Tab -->
+            <div id="tab-messages" class="tab-panel">
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Chat History</h3>
+                </div>
+                <div class="content-card-body" style="max-height: 600px; overflow-y: auto;">
+                  ${messages.length > 0 ? messages.map(msg => `
+                    <div class="message-item ${msg.role}">
+                      <div class="message-header">
+                        <span class="message-author">${msg.role === 'user' ? '👤 User' : '🤖 Assistant'} • ${msg.leadName}</span>
+                        <span class="message-time">${msg.date}</span>
+                      </div>
+                      <div class="message-content">${msg.content}</div>
+                    </div>
+                  `).join('') : '<p style="color: #64748b; text-align: center; padding: 40px;">No messages yet.</p>'}
+                </div>
+              </div>
+            </div>
+            
+            <!-- Behavior Tab -->
+            <div id="tab-behavior" class="tab-panel">
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Bot Instructions</h3>
+                </div>
+                <div class="content-card-body">
+                  <div class="form-group">
+                    <label class="form-label">System Prompt</label>
+                    <textarea id="botInstructions" class="form-input form-textarea" style="min-height: 200px;" placeholder="Describe how your bot should behave...">${botInstructions}</textarea>
+                    <div class="form-help">This tells the AI how to respond - its personality, tone, what it should/shouldn't say.</div>
+                  </div>
+                  <button class="btn btn-primary" onclick="handleBotInstructionsUpdate()">Save Instructions</button>
                 </div>
               </div>
               
-              <!-- Script Embed -->
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Greeting Message</h3>
+                </div>
+                <div class="content-card-body">
+                  <div class="form-group">
+                    <label class="form-label">Welcome Message</label>
+                    <input type="text" id="greetingMessage" class="form-input" value="${greetingMessage}" placeholder="Thank you for visiting! How may we assist you today?" />
+                    <div class="form-help">Shown in the chat bubble when visitors first see the widget.</div>
+                  </div>
+                  <button class="btn btn-primary" onclick="handleGreetingUpdate()">Save Greeting</button>
+                </div>
+              </div>
+            </div>
+            
+            <!-- Deploy Tab -->
+            <div id="tab-deploy" class="tab-panel">
               <div class="embed-section">
-                <h3>📜 Add to Website (Script)</h3>
-                <p>Add this code before the closing &lt;/body&gt; tag. The chatbot will appear as a floating button.</p>
-                <textarea class="embed-code" readonly onclick="this.select()">&lt;script&gt;
+                <h4>🔗 Direct Link</h4>
+                <p>Share this link to let users access your chatbot directly.</p>
+                <div class="copy-row">
+                  <input type="text" class="copy-input" readonly value="https://autoreplychat.com/chat/${botId}" onclick="this.select()" />
+                  <button class="btn btn-primary" onclick="copyToClipboard('https://autoreplychat.com/chat/${botId}')">Copy</button>
+                </div>
+              </div>
+              
+              <div class="embed-section">
+                <h4>📜 Website Script</h4>
+                <p>Add this code before the closing &lt;/body&gt; tag. The chatbot appears as a floating button.</p>
+                <div class="code-block">&lt;script&gt;
   (function() {
     var script = document.createElement('script');
     script.src = 'https://autoreplychat.com/embed.js';
     script.setAttribute('data-bot-id', '${botId}');
     document.body.appendChild(script);
   })();
-&lt;/script&gt;</textarea>
-                <button class="copy-btn" onclick="copyEmbed('script')">Copy Code</button>
+&lt;/script&gt;</div>
+                <button class="btn btn-secondary" style="margin-top: 12px;" onclick="copyEmbed('script')">Copy Code</button>
               </div>
               
-              <!-- Iframe Embed -->
               <div class="embed-section">
-                <h3>🖼️ Display Inside Webpage (Iframe)</h3>
-                <p>Embed the chatbot directly into your page layout. Adjust width and height as needed.</p>
-                <textarea class="embed-code" readonly onclick="this.select()" style="min-height: 80px;">&lt;iframe src="https://autoreplychat.com/chat/${botId}" style="width: 400px; height: 600px; border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"&gt;&lt;/iframe&gt;</textarea>
-                <button class="copy-btn" onclick="copyEmbed('iframe')">Copy Code</button>
+                <h4>🖼️ Iframe Embed</h4>
+                <p>Embed the chatbot directly into your page layout.</p>
+                <div class="code-block">&lt;iframe src="https://autoreplychat.com/chat/${botId}" style="width: 400px; height: 600px; border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"&gt;&lt;/iframe&gt;</div>
+                <button class="btn btn-secondary" style="margin-top: 12px;" onclick="copyEmbed('iframe')">Copy Code</button>
               </div>
               
-              <p style="color: #6b7280; font-size: 13px;">Bot ID: <strong>${botId}</strong></p>
+              <p style="color: #64748b; font-size: 13px; margin-top: 20px;">Bot ID: <strong>${botId}</strong></p>
             </div>
           </div>
         </div>
         
         <!-- Create Bot Modal -->
-        <div id="createBotModal" class="modal">
-          <div class="modal-content">
-            <h2>Create New Bot</h2>
+        <div id="createBotModal" class="modal-overlay">
+          <div class="modal">
+            <h3>Create New Bot</h3>
+            <p>Give your new chatbot a name to get started.</p>
             <div class="form-group">
-              <label for="newBotName">Bot Name</label>
-              <input type="text" id="newBotName" placeholder="e.g., Support Bot, Sales Bot" />
+              <label class="form-label">Bot Name</label>
+              <input type="text" id="newBotName" class="form-input" placeholder="e.g., Support Bot, Sales Assistant" />
             </div>
-            <div class="modal-buttons">
-              <button class="cancel-btn" onclick="hideCreateBotModal()">Cancel</button>
-              <button onclick="createBot()">Create Bot</button>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="hideCreateBotModal()">Cancel</button>
+              <button class="btn btn-primary" onclick="createBot()">Create Bot</button>
             </div>
           </div>
         </div>
         
         <!-- Delete Bot Modal -->
-        <div id="deleteBotModal" class="modal">
-          <div class="modal-content">
-            <h2>Delete Bot</h2>
-            <p style="margin-bottom: 15px; color: #6b7280;">Are you sure you want to delete "${currentBot.name}"? This will also delete all documents, leads, and messages associated with this bot.</p>
-            <div class="modal-buttons">
-              <button class="cancel-btn" onclick="hideDeleteBotModal()">Cancel</button>
-              <button class="delete-btn" onclick="deleteBot()">Delete Bot</button>
+        <div id="deleteBotModal" class="modal-overlay">
+          <div class="modal">
+            <h3>Delete "${currentBot.name}"?</h3>
+            <p>This will permanently delete all documents, leads, and messages associated with this bot. This action cannot be undone.</p>
+            <div class="modal-actions">
+              <button class="btn btn-secondary" onclick="hideDeleteBotModal()">Cancel</button>
+              <button class="btn btn-danger" onclick="deleteBot()">Delete Bot</button>
             </div>
           </div>
         </div>
@@ -844,6 +1326,32 @@ You are a friendly customer support assistant for XYZ Company.
           const customerId = '${customerId}';
           const botId = '${botId}';
           let websiteMode = 'full';
+          let activeTab = 'overview';
+          
+          const tabTitles = {
+            overview: 'Dashboard',
+            upload: 'Upload Content',
+            documents: 'Documents',
+            qa: 'Q&A Pairs',
+            leads: 'Leads',
+            messages: 'Messages',
+            behavior: 'Bot Behavior',
+            deploy: 'Deploy'
+          };
+          
+          function switchTab(tab) {
+            // Hide all panels
+            document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+            
+            // Show selected panel
+            document.getElementById('tab-' + tab).classList.add('active');
+            event.target.closest('.nav-item').classList.add('active');
+            
+            // Update header title
+            document.getElementById('pageTitle').textContent = tabTitles[tab] || 'Dashboard';
+            activeTab = tab;
+          }
           
           function switchBot(newBotId) {
             window.location.href = '/api/dashboard/${customerId}?bot=' + newBotId;
@@ -865,57 +1373,25 @@ You are a friendly customer support assistant for XYZ Company.
             document.getElementById('deleteBotModal').classList.remove('show');
           }
           
-          async function createBot() {
-            const name = document.getElementById('newBotName').value.trim();
-            if (!name) {
-              showError('Please enter a bot name');
-              return;
-            }
-            
-            try {
-              const response = await fetch('/api/bots', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ customerId, name })
-              });
-              
-              const data = await response.json();
-              
-              if (response.ok) {
-                window.location.href = '/api/dashboard/${customerId}?bot=' + data.botId;
-              } else {
-                showError(data.error || 'Failed to create bot');
-              }
-            } catch (error) {
-              showError('Network error. Please try again.');
-            }
+          function showSuccess(message) {
+            const el = document.getElementById('alert-success');
+            el.textContent = message;
+            el.style.display = 'block';
+            setTimeout(() => {
+              el.style.display = 'none';
+              location.reload();
+            }, 2000);
           }
           
-          async function deleteBot() {
-            try {
-              const response = await fetch('/api/bots/' + botId, {
-                method: 'DELETE',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ customerId })
-              });
-              
-              if (response.ok) {
-                window.location.href = '/api/dashboard/${customerId}';
-              } else {
-                const data = await response.json();
-                showError(data.error || 'Failed to delete bot');
-              }
-            } catch (error) {
-              showError('Network error. Please try again.');
-            }
+          function showError(message) {
+            const el = document.getElementById('alert-error');
+            el.textContent = message;
+            el.style.display = 'block';
+            setTimeout(() => el.style.display = 'none', 5000);
           }
           
-          function switchTab(tab) {
-            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            
-            event.target.classList.add('active');
-            document.getElementById(tab + '-tab').classList.add('active');
+          function logout() {
+            fetch('/api/auth/logout', { method: 'POST' }).then(() => window.location = '/login');
           }
           
           function setWebsiteMode(mode) {
@@ -924,27 +1400,8 @@ You are a friendly customer support assistant for XYZ Company.
             document.getElementById('singlePageBtn').classList.toggle('active', mode === 'single');
           }
           
-          function showSuccess(message) {
-            const el = document.getElementById('success-message');
-            el.textContent = message;
-            el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 5000);
-            location.reload();
-          }
-          
-          function showError(message) {
-            const el = document.getElementById('error-message');
-            el.textContent = message;
-            el.style.display = 'block';
-            setTimeout(() => el.style.display = 'none', 5000);
-          }
-          
           function copyToClipboard(text) {
-            navigator.clipboard.writeText(text).then(() => {
-              alert('Copied to clipboard!');
-            }).catch(() => {
-              alert('Failed to copy');
-            });
+            navigator.clipboard.writeText(text).then(() => alert('Copied!')).catch(() => alert('Failed to copy'));
           }
           
           function copyEmbed(type) {
@@ -961,164 +1418,127 @@ You are a friendly customer support assistant for XYZ Company.
             } else if (type === 'iframe') {
               text = \`<iframe src="https://autoreplychat.com/chat/${botId}" style="width: 400px; height: 600px; border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"></iframe>\`;
             }
-            navigator.clipboard.writeText(text).then(() => {
-              alert('Code copied to clipboard!');
-            }).catch(() => {
-              alert('Failed to copy');
-            });
+            navigator.clipboard.writeText(text).then(() => alert('Code copied!')).catch(() => alert('Failed to copy'));
           }
           
-          async function downloadDocument(docId, format) {
+          async function createBot() {
+            const name = document.getElementById('newBotName').value.trim();
+            if (!name) { showError('Please enter a bot name'); return; }
+            
             try {
-              const response = await fetch('/api/documents/' + docId + '/download?format=' + format);
-              
-              if (!response.ok) {
-                showError('Download failed');
-                return;
+              const response = await fetch('/api/bots', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customerId, name })
+              });
+              const data = await response.json();
+              if (response.ok) {
+                window.location.href = '/api/dashboard/${customerId}?bot=' + data.botId;
+              } else {
+                showError(data.error || 'Failed to create bot');
               }
-              
-              const blob = await response.blob();
-              const url = window.URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = 'document-' + docId + '.' + format;
-              document.body.appendChild(a);
-              a.click();
-              window.URL.revokeObjectURL(url);
-              document.body.removeChild(a);
             } catch (error) {
-              showError('Network error. Please try again.');
+              showError('Network error');
+            }
+          }
+          
+          async function deleteBot() {
+            try {
+              const response = await fetch('/api/bots/' + botId, {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customerId })
+              });
+              if (response.ok) {
+                window.location.href = '/api/dashboard/${customerId}';
+              } else {
+                const data = await response.json();
+                showError(data.error || 'Failed to delete bot');
+              }
+            } catch (error) {
+              showError('Network error');
             }
           }
           
           async function handleFileUpload(event) {
             const files = event.target.files;
             const formData = new FormData();
-            
-            for (let file of files) {
-              formData.append('files', file);
-            }
+            for (let file of files) formData.append('files', file);
             formData.append('customerId', customerId);
             formData.append('botId', botId);
             
             try {
-              const response = await fetch('/api/content/upload', {
-                method: 'POST',
-                body: formData
-              });
+              const response = await fetch('/api/content/upload', { method: 'POST', body: formData });
               const data = await response.json();
-              
-              if (response.ok) {
-                showSuccess(data.message || 'Files uploaded successfully!');
-              } else {
-                showError(data.error || 'Upload failed');
-              }
+              if (response.ok) showSuccess(data.message || 'Files uploaded!');
+              else showError(data.error || 'Upload failed');
             } catch (error) {
-              showError('Network error. Please try again.');
+              showError('Network error');
             }
           }
           
           async function handleWebsiteScrape() {
             const url = document.getElementById('websiteUrl').value;
-            if (!url) {
-              showError('Please enter a website URL');
-              return;
-            }
+            if (!url) { showError('Please enter a URL'); return; }
             
             try {
               const response = await fetch('/api/content/scrape-website', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  customerId,
-                  botId,
-                  url,
-                  mode: websiteMode
-                })
+                body: JSON.stringify({ customerId, botId, url, mode: websiteMode })
               });
               const data = await response.json();
-              
-              if (response.ok) {
-                showSuccess(data.message || 'Website scraped successfully!');
-              } else {
-                showError(data.error || 'Scraping failed');
-              }
+              if (response.ok) showSuccess(data.message || 'Website scraped!');
+              else showError(data.error || 'Scraping failed');
             } catch (error) {
-              showError('Network error. Please try again.');
+              showError('Network error');
             }
           }
           
           async function handleYoutubeTranscript() {
             const url = document.getElementById('youtubeUrl').value;
-            if (!url) {
-              showError('Please enter a YouTube URL');
-              return;
-            }
+            if (!url) { showError('Please enter a YouTube URL'); return; }
             
             try {
               const response = await fetch('/api/content/youtube', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  customerId,
-                  botId,
-                  url
-                })
+                body: JSON.stringify({ customerId, botId, url })
               });
               const data = await response.json();
-              
-              if (response.ok) {
-                showSuccess(data.message || 'Transcript extracted successfully!');
-              } else {
-                showError(data.error || 'Extraction failed');
-              }
+              if (response.ok) showSuccess(data.message || 'Transcript extracted!');
+              else showError(data.error || 'Extraction failed');
             } catch (error) {
-              showError('Network error. Please try again.');
+              showError('Network error');
             }
           }
           
           async function handleTextUpload() {
             const title = document.getElementById('textTitle').value;
             const content = document.getElementById('textContent').value;
-            
-            if (!title || !content) {
-              showError('Please fill in both title and content');
-              return;
-            }
+            if (!title || !content) { showError('Please fill in title and content'); return; }
             
             try {
               const response = await fetch('/api/content/text', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  customerId,
-                  botId,
-                  title,
-                  content
-                })
+                body: JSON.stringify({ customerId, botId, title, content })
               });
               const data = await response.json();
-              
               if (response.ok) {
-                showSuccess(data.message || 'Text uploaded successfully!');
+                showSuccess(data.message || 'Text uploaded!');
                 document.getElementById('textTitle').value = '';
                 document.getElementById('textContent').value = '';
-              } else {
-                showError(data.error || 'Upload failed');
-              }
+              } else showError(data.error || 'Upload failed');
             } catch (error) {
-              showError('Network error. Please try again.');
+              showError('Network error');
             }
           }
           
           async function handleQAUpload() {
             const question = document.getElementById('qaQuestion').value;
             const answer = document.getElementById('qaAnswer').value;
-            
-            if (!question || !answer) {
-              showError('Please fill in both question and answer');
-              return;
-            }
+            if (!question || !answer) { showError('Please fill in question and answer'); return; }
             
             const content = 'Q: ' + question + '\\n\\nA: ' + answer;
             const title = 'Q&A: ' + question.substring(0, 50) + (question.length > 50 ? '...' : '');
@@ -1127,24 +1547,16 @@ You are a friendly customer support assistant for XYZ Company.
               const response = await fetch('/api/content/text', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  customerId,
-                  botId,
-                  title,
-                  content
-                })
+                body: JSON.stringify({ customerId, botId, title, content })
               });
               const data = await response.json();
-              
               if (response.ok) {
-                showSuccess('Q&A pair added successfully!');
+                showSuccess('Q&A pair added!');
                 document.getElementById('qaQuestion').value = '';
                 document.getElementById('qaAnswer').value = '';
-              } else {
-                showError(data.error || 'Failed to add Q&A pair');
-              }
+              } else showError(data.error || 'Failed to add');
             } catch (error) {
-              showError('Network error. Please try again.');
+              showError('Network error');
             }
           }
           
@@ -1155,20 +1567,12 @@ You are a friendly customer support assistant for XYZ Company.
               const response = await fetch('/api/bots/' + botId + '/instructions', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  customerId,
-                  instructions
-                })
+                body: JSON.stringify({ customerId, instructions })
               });
-              const data = await response.json();
-              
-              if (response.ok) {
-                showSuccess('Bot instructions updated successfully!');
-              } else {
-                showError(data.error || 'Failed to update instructions');
-              }
+              if (response.ok) showSuccess('Instructions saved!');
+              else showError('Failed to save');
             } catch (error) {
-              showError('Network error. Please try again.');
+              showError('Network error');
             }
           }
           
@@ -1179,20 +1583,12 @@ You are a friendly customer support assistant for XYZ Company.
               const response = await fetch('/api/bots/' + botId + '/greeting', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  customerId,
-                  greeting
-                })
+                body: JSON.stringify({ customerId, greeting })
               });
-              const data = await response.json();
-              
-              if (response.ok) {
-                showSuccess('Greeting message updated successfully!');
-              } else {
-                showError(data.error || 'Failed to update greeting');
-              }
+              if (response.ok) showSuccess('Greeting saved!');
+              else showError('Failed to save');
             } catch (error) {
-              showError('Network error. Please try again.');
+              showError('Network error');
             }
           }
         </script>
