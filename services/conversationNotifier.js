@@ -122,7 +122,6 @@ async function sendConversationTranscript(session) {
           </div>
           <div class="footer">
             <p>This notification was sent by AutoReplyChat.</p>
-            <p>You can manage notification settings in your dashboard.</p>
           </div>
         </div>
       </body>
