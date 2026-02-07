@@ -48,7 +48,7 @@ router.get('/:customerId', async (req, res) => {
     
     // Get all bots for this customer
     const botsResult = await query(
-      'SELECT id, name, bot_instructions, greeting_message, header_title, header_color, text_color, lead_capture_enabled, notification_emails, conversation_notifications, created_at FROM bots WHERE customer_id = $1 ORDER BY created_at ASC',
+      'SELECT id, name, bot_instructions, greeting_message, header_title, header_color, text_color, lead_capture_enabled, notification_emails, conversation_notifications, chat_bubble_bg, avatar_bg, button_style, button_position, button_size, bar_message, chat_window_bg, user_message_bg, bot_message_bg, send_button_bg, created_at FROM bots WHERE customer_id = $1 ORDER BY created_at ASC',
       [customerId]
     );
     
@@ -79,6 +79,16 @@ router.get('/:customerId', async (req, res) => {
     const leadCaptureEnabled = currentBot.lead_capture_enabled !== false;
     const notificationEmails = currentBot.notification_emails || '';
     const conversationNotifications = currentBot.conversation_notifications || false;
+    const chatBubbleBg = currentBot.chat_bubble_bg || '#3b82f6';
+    const avatarBg = currentBot.avatar_bg || '#e0e0e0';
+    const buttonStyle = currentBot.button_style || 'circle';
+    const buttonPosition = currentBot.button_position || 'right';
+    const buttonSize = currentBot.button_size || 60;
+    const barMessage = currentBot.bar_message || 'Chat Now';
+    const chatWindowBg = currentBot.chat_window_bg || '#ffffff';
+    const userMessageBg = currentBot.user_message_bg || '#3b82f6';
+    const botMessageBg = currentBot.bot_message_bg || '#f3f4f6';
+    const sendButtonBg = currentBot.send_button_bg || '#3b82f6';
     
     // Get document count for current bot
     const docCountResult = await query(
@@ -1315,59 +1325,172 @@ router.get('/:customerId', async (req, res) => {
             <div id="tab-appearance" class="tab-panel">
               <div class="content-card">
                 <div class="content-card-header">
-                  <h3>Widget Appearance</h3>
+                  <h3>Chat Button</h3>
+                </div>
+                <div class="content-card-body">
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                    <div class="form-group">
+                      <label class="form-label">Button Style</label>
+                      <div style="display: flex; gap: 8px;">
+                        <button type="button" id="styleCircle" class="btn ${buttonStyle === 'circle' ? 'btn-primary' : 'btn-secondary'}" onclick="setButtonStyle('circle')" style="padding: 8px 16px;">Circle</button>
+                        <button type="button" id="styleBar" class="btn ${buttonStyle === 'bar' ? 'btn-primary' : 'btn-secondary'}" onclick="setButtonStyle('bar')" style="padding: 8px 16px;">Bar</button>
+                      </div>
+                      <input type="hidden" id="buttonStyle" value="${buttonStyle}" />
+                    </div>
+                    
+                    <div class="form-group">
+                      <label class="form-label">Button Position</label>
+                      <div style="display: flex; gap: 8px;">
+                        <button type="button" id="posLeft" class="btn ${buttonPosition === 'left' ? 'btn-primary' : 'btn-secondary'}" onclick="setButtonPosition('left')" style="padding: 8px 16px;">Left</button>
+                        <button type="button" id="posRight" class="btn ${buttonPosition === 'right' ? 'btn-primary' : 'btn-secondary'}" onclick="setButtonPosition('right')" style="padding: 8px 16px;">Right</button>
+                      </div>
+                      <input type="hidden" id="buttonPosition" value="${buttonPosition}" />
+                    </div>
+                  </div>
+                  
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px;">
+                    <div class="form-group">
+                      <label class="form-label">Button Size: <span id="sizeValue">${buttonSize}px</span></label>
+                      <input type="range" id="buttonSize" min="50" max="96" value="${buttonSize}" oninput="document.getElementById('sizeValue').textContent = this.value + 'px'; updatePreview();" style="width: 100%;" />
+                    </div>
+                    
+                    <div class="form-group">
+                      <label class="form-label">Bar Message</label>
+                      <input type="text" id="barMessage" class="form-input" value="${barMessage}" placeholder="Chat Now" oninput="updatePreview()" />
+                    </div>
+                  </div>
+                  
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px;">
+                    <div class="form-group">
+                      <label class="form-label">Chat Bubble Background</label>
+                      <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="color" id="chatBubbleBg" value="${chatBubbleBg}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" oninput="updatePreview()" />
+                        <input type="text" id="chatBubbleBgText" class="form-input" value="${chatBubbleBg}" style="width: 100px;" onchange="document.getElementById('chatBubbleBg').value = this.value; updatePreview();" />
+                      </div>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label class="form-label">Avatar Background</label>
+                      <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="color" id="avatarBg" value="${avatarBg}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" oninput="updatePreview()" />
+                        <input type="text" id="avatarBgText" class="form-input" value="${avatarBg}" style="width: 100px;" onchange="document.getElementById('avatarBg').value = this.value; updatePreview();" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Chat Window</h3>
                 </div>
                 <div class="content-card-body">
                   <div class="form-group">
                     <label class="form-label">Header Title</label>
-                    <input type="text" id="headerTitle" class="form-input" value="${headerTitle}" placeholder="Support Assistant" />
-                    <div class="form-help">The title shown at the top of the chat widget.</div>
+                    <input type="text" id="headerTitle" class="form-input" value="${headerTitle}" placeholder="Support Assistant" oninput="updatePreview()" />
                   </div>
                   
-                  <div class="form-group">
-                    <label class="form-label">Header Color</label>
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                      <input type="color" id="headerColor" value="${headerColor}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" />
-                      <input type="text" id="headerColorText" class="form-input" value="${headerColor}" style="width: 120px;" onchange="document.getElementById('headerColor').value = this.value" />
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px;">
+                    <div class="form-group">
+                      <label class="form-label">Header Color</label>
+                      <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="color" id="headerColor" value="${headerColor}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" oninput="updatePreview()" />
+                        <input type="text" id="headerColorText" class="form-input" value="${headerColor}" style="width: 100px;" onchange="document.getElementById('headerColor').value = this.value; updatePreview();" />
+                      </div>
                     </div>
-                    <div class="form-help">Background color of the header and buttons.</div>
-                  </div>
-                  
-                  <div class="form-group">
-                    <label class="form-label">Text Color</label>
-                    <div style="display: flex; gap: 12px; align-items: center;">
+                    
+                    <div class="form-group">
+                      <label class="form-label">Header Text Color</label>
                       <div style="display: flex; gap: 8px;">
                         <button type="button" id="textWhite" class="btn ${textColor === '#ffffff' ? 'btn-primary' : 'btn-secondary'}" onclick="setTextColor('#ffffff')" style="padding: 8px 16px;">White</button>
                         <button type="button" id="textBlack" class="btn ${textColor === '#000000' ? 'btn-primary' : 'btn-secondary'}" onclick="setTextColor('#000000')" style="padding: 8px 16px;">Black</button>
                       </div>
                       <input type="hidden" id="textColor" value="${textColor}" />
                     </div>
-                    <div class="form-help">Color of text in the header.</div>
                   </div>
                   
-                  <div style="margin-top: 24px; padding: 20px; background: #f8fafc; border-radius: 12px;">
-                    <label class="form-label" style="margin-bottom: 12px;">Preview</label>
-                    <div id="previewWidget" style="width: 300px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                      <div id="previewHeader" style="background: ${headerColor}; color: ${textColor}; padding: 16px;">
-                        <div style="font-weight: 600;" id="previewTitle">${headerTitle}</div>
-                        <div style="font-size: 12px; opacity: 0.8;">Ask us anything</div>
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px;">
+                    <div class="form-group">
+                      <label class="form-label">Chat Window Background</label>
+                      <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="color" id="chatWindowBg" value="${chatWindowBg}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" oninput="updatePreview()" />
+                        <input type="text" id="chatWindowBgText" class="form-input" value="${chatWindowBg}" style="width: 100px;" onchange="document.getElementById('chatWindowBg').value = this.value; updatePreview();" />
                       </div>
-                      <div style="background: #f9fafb; padding: 20px; min-height: 100px;">
-                        <div style="text-align: center; color: #9ca3af; font-size: 14px;">Chat messages appear here</div>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label class="form-label">Send Button Color</label>
+                      <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="color" id="sendButtonBg" value="${sendButtonBg}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" oninput="updatePreview()" />
+                        <input type="text" id="sendButtonBgText" class="form-input" value="${sendButtonBg}" style="width: 100px;" onchange="document.getElementById('sendButtonBg').value = this.value; updatePreview();" />
                       </div>
-                      <div style="background: white; padding: 12px; border-top: 1px solid #e5e7eb;">
-                        <div style="display: flex; gap: 8px;">
-                          <div style="flex: 1; padding: 8px 12px; background: #f1f5f9; border-radius: 8px; color: #94a3b8; font-size: 14px;">Ask a question...</div>
-                          <div id="previewSendBtn" style="background: ${headerColor}; color: ${textColor}; padding: 8px 12px; border-radius: 8px;">➤</div>
+                    </div>
+                  </div>
+                  
+                  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 16px;">
+                    <div class="form-group">
+                      <label class="form-label">User Message Background</label>
+                      <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="color" id="userMessageBg" value="${userMessageBg}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" oninput="updatePreview()" />
+                        <input type="text" id="userMessageBgText" class="form-input" value="${userMessageBg}" style="width: 100px;" onchange="document.getElementById('userMessageBg').value = this.value; updatePreview();" />
+                      </div>
+                    </div>
+                    
+                    <div class="form-group">
+                      <label class="form-label">Bot Message Background</label>
+                      <div style="display: flex; gap: 12px; align-items: center;">
+                        <input type="color" id="botMessageBg" value="${botMessageBg}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" oninput="updatePreview()" />
+                        <input type="text" id="botMessageBgText" class="form-input" value="${botMessageBg}" style="width: 100px;" onchange="document.getElementById('botMessageBg').value = this.value; updatePreview();" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Preview</h3>
+                </div>
+                <div class="content-card-body">
+                  <div style="display: flex; gap: 40px; align-items: flex-start;">
+                    <div>
+                      <label class="form-label" style="margin-bottom: 12px;">Chat Button</label>
+                      <div id="previewButton" style="display: inline-flex; align-items: center; justify-content: center; background: ${chatBubbleBg}; border-radius: 50%; width: ${buttonSize}px; height: ${buttonSize}px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                        <svg width="28" height="28" fill="white" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                      </div>
+                      <div id="previewBarButton" style="display: none; align-items: center; gap: 8px; background: ${chatBubbleBg}; color: white; padding: 12px 20px; border-radius: 24px; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                        <svg width="20" height="20" fill="white" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                        <span id="previewBarText">${barMessage}</span>
+                      </div>
+                    </div>
+                    
+                    <div>
+                      <label class="form-label" style="margin-bottom: 12px;">Chat Window</label>
+                      <div id="previewWidget" style="width: 320px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                        <div id="previewHeader" style="background: ${headerColor}; color: ${textColor}; padding: 16px;">
+                          <div style="font-weight: 600;" id="previewTitle">${headerTitle}</div>
+                          <div style="font-size: 12px; opacity: 0.8;">Ask us anything</div>
                         </div>
-                        <div style="text-align: center; margin-top: 8px;">
-                          <span style="font-size: 11px; color: #9ca3af;">Powered by AutoReplyChat</span>
+                        <div id="previewMessages" style="background: ${chatWindowBg}; padding: 16px; min-height: 120px;">
+                          <div id="previewBotMsg" style="background: ${botMessageBg}; color: #1f2937; padding: 10px 14px; border-radius: 12px; margin-bottom: 10px; max-width: 80%;">Hi! How can I help you today?</div>
+                          <div id="previewUserMsg" style="background: ${userMessageBg}; color: white; padding: 10px 14px; border-radius: 12px; margin-left: auto; max-width: 80%; text-align: right;">I have a question</div>
+                        </div>
+                        <div style="background: white; padding: 12px; border-top: 1px solid #e5e7eb;">
+                          <div style="display: flex; gap: 8px;">
+                            <div style="flex: 1; padding: 10px 14px; background: #f1f5f9; border-radius: 8px; color: #94a3b8; font-size: 14px;">Ask a question...</div>
+                            <div id="previewSendBtn" style="background: ${sendButtonBg}; color: white; padding: 10px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                              <svg width="18" height="18" fill="currentColor" viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                            </div>
+                          </div>
+                          <div style="text-align: center; margin-top: 8px;">
+                            <span style="font-size: 11px; color: #9ca3af;">Powered by AutoReplyChat</span>
+                          </div>
                         </div>
                       </div>
                     </div>
                   </div>
                   
-                  <button class="btn btn-primary" style="margin-top: 20px;" onclick="handleAppearanceUpdate()">Save Appearance</button>
+                  <button class="btn btn-primary" style="margin-top: 24px;" onclick="handleAppearanceUpdate()">Save Appearance</button>
                 </div>
               </div>
             </div>
@@ -1753,16 +1876,75 @@ router.get('/:customerId', async (req, res) => {
             updatePreview();
           }
           
+          function setButtonStyle(style) {
+            document.getElementById('buttonStyle').value = style;
+            document.getElementById('styleCircle').className = style === 'circle' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('styleBar').className = style === 'bar' ? 'btn btn-primary' : 'btn btn-secondary';
+            updatePreview();
+          }
+          
+          function setButtonPosition(pos) {
+            document.getElementById('buttonPosition').value = pos;
+            document.getElementById('posLeft').className = pos === 'left' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('posRight').className = pos === 'right' ? 'btn btn-primary' : 'btn btn-secondary';
+            updatePreview();
+          }
+          
           function updatePreview() {
-            const headerColor = document.getElementById('headerColor').value;
-            const textColor = document.getElementById('textColor').value;
-            const headerTitle = document.getElementById('headerTitle').value;
+            const headerColor = document.getElementById('headerColor')?.value || '#3b82f6';
+            const textColor = document.getElementById('textColor')?.value || '#ffffff';
+            const headerTitle = document.getElementById('headerTitle')?.value || 'Support Assistant';
+            const chatBubbleBg = document.getElementById('chatBubbleBg')?.value || '#3b82f6';
+            const chatWindowBg = document.getElementById('chatWindowBg')?.value || '#ffffff';
+            const userMessageBg = document.getElementById('userMessageBg')?.value || '#3b82f6';
+            const botMessageBg = document.getElementById('botMessageBg')?.value || '#f3f4f6';
+            const sendButtonBg = document.getElementById('sendButtonBg')?.value || '#3b82f6';
+            const buttonStyle = document.getElementById('buttonStyle')?.value || 'circle';
+            const buttonSize = document.getElementById('buttonSize')?.value || 60;
+            const barMessage = document.getElementById('barMessage')?.value || 'Chat Now';
             
-            document.getElementById('previewHeader').style.background = headerColor;
-            document.getElementById('previewHeader').style.color = textColor;
-            document.getElementById('previewTitle').textContent = headerTitle || 'Support Assistant';
-            document.getElementById('previewSendBtn').style.background = headerColor;
-            document.getElementById('previewSendBtn').style.color = textColor;
+            // Update header preview
+            const previewHeader = document.getElementById('previewHeader');
+            if (previewHeader) {
+              previewHeader.style.background = headerColor;
+              previewHeader.style.color = textColor;
+            }
+            
+            const previewTitle = document.getElementById('previewTitle');
+            if (previewTitle) previewTitle.textContent = headerTitle;
+            
+            // Update button preview
+            const previewButton = document.getElementById('previewButton');
+            const previewBarButton = document.getElementById('previewBarButton');
+            if (previewButton && previewBarButton) {
+              if (buttonStyle === 'circle') {
+                previewButton.style.display = 'inline-flex';
+                previewBarButton.style.display = 'none';
+                previewButton.style.background = chatBubbleBg;
+                previewButton.style.width = buttonSize + 'px';
+                previewButton.style.height = buttonSize + 'px';
+              } else {
+                previewButton.style.display = 'none';
+                previewBarButton.style.display = 'inline-flex';
+                previewBarButton.style.background = chatBubbleBg;
+              }
+            }
+            
+            const previewBarText = document.getElementById('previewBarText');
+            if (previewBarText) previewBarText.textContent = barMessage;
+            
+            // Update messages preview
+            const previewMessages = document.getElementById('previewMessages');
+            if (previewMessages) previewMessages.style.background = chatWindowBg;
+            
+            const previewUserMsg = document.getElementById('previewUserMsg');
+            if (previewUserMsg) previewUserMsg.style.background = userMessageBg;
+            
+            const previewBotMsg = document.getElementById('previewBotMsg');
+            if (previewBotMsg) previewBotMsg.style.background = botMessageBg;
+            
+            const previewSendBtn = document.getElementById('previewSendBtn');
+            if (previewSendBtn) previewSendBtn.style.background = sendButtonBg;
           }
           
           // Add event listeners for live preview
@@ -1771,18 +1953,60 @@ router.get('/:customerId', async (req, res) => {
             updatePreview();
           });
           
-          document.getElementById('headerTitle')?.addEventListener('input', updatePreview);
+          document.getElementById('chatBubbleBg')?.addEventListener('input', function() {
+            document.getElementById('chatBubbleBgText').value = this.value;
+            updatePreview();
+          });
+          
+          document.getElementById('chatWindowBg')?.addEventListener('input', function() {
+            document.getElementById('chatWindowBgText').value = this.value;
+            updatePreview();
+          });
+          
+          document.getElementById('userMessageBg')?.addEventListener('input', function() {
+            document.getElementById('userMessageBgText').value = this.value;
+            updatePreview();
+          });
+          
+          document.getElementById('botMessageBg')?.addEventListener('input', function() {
+            document.getElementById('botMessageBgText').value = this.value;
+            updatePreview();
+          });
+          
+          document.getElementById('sendButtonBg')?.addEventListener('input', function() {
+            document.getElementById('sendButtonBgText').value = this.value;
+            updatePreview();
+          });
+          
+          document.getElementById('avatarBg')?.addEventListener('input', function() {
+            document.getElementById('avatarBgText').value = this.value;
+            updatePreview();
+          });
           
           async function handleAppearanceUpdate() {
-            const headerTitle = document.getElementById('headerTitle').value;
-            const headerColor = document.getElementById('headerColor').value;
-            const textColor = document.getElementById('textColor').value;
+            const headerTitle = document.getElementById('headerTitle')?.value || 'Support Assistant';
+            const headerColor = document.getElementById('headerColor')?.value || '#3b82f6';
+            const textColor = document.getElementById('textColor')?.value || '#ffffff';
+            const chatBubbleBg = document.getElementById('chatBubbleBg')?.value || '#3b82f6';
+            const avatarBg = document.getElementById('avatarBg')?.value || '#e0e0e0';
+            const buttonStyle = document.getElementById('buttonStyle')?.value || 'circle';
+            const buttonPosition = document.getElementById('buttonPosition')?.value || 'right';
+            const buttonSize = parseInt(document.getElementById('buttonSize')?.value) || 60;
+            const barMessage = document.getElementById('barMessage')?.value || 'Chat Now';
+            const chatWindowBg = document.getElementById('chatWindowBg')?.value || '#ffffff';
+            const userMessageBg = document.getElementById('userMessageBg')?.value || '#3b82f6';
+            const botMessageBg = document.getElementById('botMessageBg')?.value || '#f3f4f6';
+            const sendButtonBg = document.getElementById('sendButtonBg')?.value || '#3b82f6';
             
             try {
               const response = await fetch('/api/bots/' + botId + '/appearance', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ customerId, headerTitle, headerColor, textColor })
+                body: JSON.stringify({ 
+                  customerId, headerTitle, headerColor, textColor,
+                  chatBubbleBg, avatarBg, buttonStyle, buttonPosition, buttonSize, barMessage,
+                  chatWindowBg, userMessageBg, botMessageBg, sendButtonBg
+                })
               });
               if (response.ok) showSuccess('Appearance saved!');
               else showError('Failed to save');
