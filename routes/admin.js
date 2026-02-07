@@ -3,158 +3,356 @@ import { query } from '../db/database.js';
 
 const router = express.Router();
 
-// GET /api/admin - Simple admin interface
-router.get('/', (req, res) => {
-  const testEmail = process.env.TEST_BUSINESS_EMAIL || 'your-email@example.com';
-  
-  res.send(`
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <title>AutaiChat Admin</title>
-      <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 50px auto; padding: 20px; }
-        h1 { color: #2563eb; }
-        .section { background: #f9fafb; padding: 20px; margin: 20px 0; border-radius: 8px; }
-        input, textarea { width: 100%; padding: 10px; margin: 10px 0; border: 1px solid #ddd; border-radius: 4px; box-sizing: border-box; }
-        button { background: #2563eb; color: white; padding: 10px 20px; border: none; border-radius: 4px; cursor: pointer; }
-        button:hover { background: #1d4ed8; }
-        .result { margin-top: 20px; padding: 10px; background: #e0f2fe; border-radius: 4px; white-space: pre-wrap; }
-      </style>
-    </head>
-    <body>
-      <h1>🎯 AutaiChat Admin Test Page</h1>
-      
-      <div class="section">
-        <h2>Step 1: Create Test Customer</h2>
-        <button onclick="createCustomer()">Create Customer (ID: 1)</button>
-        <div id="customer-result" class="result" style="display:none;"></div>
-      </div>
+// Simple admin auth check - uses environment variable
+function requireAdminAuth(req, res, next) {
+  const adminKey = req.query.key || req.headers['x-admin-key'];
+  if (adminKey !== process.env.ADMIN_KEY) {
+    return res.status(401).json({ error: 'Unauthorized' });
+  }
+  next();
+}
 
-      <div class="section">
-        <h2>Step 2: Upload Content</h2>
-        <textarea id="content" rows="6" placeholder="Enter content for the chatbot to learn...">Welcome to Autaimate! We build custom SaaS solutions for UK businesses. Our services include TradeCalcs (electrical calculators for BS 7671 compliance), EquipSafety (QR-based safety compliance for care homes at £199/month), and DetailRecon (AI reconnaissance for close protection at £29.99/report). We are based in London and founded by Mick who has 40+ years of construction experience.</textarea>
-        <button onclick="uploadContent()">Upload Content</button>
-        <div id="upload-result" class="result" style="display:none;"></div>
-      </div>
+// GET /api/admin - Admin dashboard
+router.get('/', requireAdminAuth, async (req, res) => {
+  try {
+    // Get all customers with auth info and stats
+    const customers = await query(`
+      SELECT 
+        c.id,
+        c.name,
+        c.email,
+        c.business_email,
+        c.created_at,
+        c.trial_ends_at,
+        c.subscription_status,
+        ca.last_login,
+        ca.failed_login_attempts,
+        ca.locked_until,
+        (SELECT COUNT(*) FROM bots WHERE customer_id = c.id) as bot_count,
+        (SELECT COUNT(*) FROM documents WHERE customer_id = c.id) as doc_count,
+        (SELECT COUNT(*) FROM leads WHERE bot_id IN (SELECT id FROM bots WHERE customer_id = c.id)) as lead_count
+      FROM customers c
+      LEFT JOIN customers_auth ca ON ca.customer_id = c.id
+      ORDER BY c.created_at DESC
+    `);
 
-      <div class="section">
-        <h2>Step 3: Test RAG</h2>
-        <input type="text" id="question" placeholder="Ask a question about the content..." value="What services does Autaimate offer?" />
-        <button onclick="testChat()">Ask Question</button>
-        <div id="chat-result" class="result" style="display:none;"></div>
-      </div>
+    const totalCustomers = customers.rows.length;
+    const activeTrials = customers.rows.filter(c => 
+      c.subscription_status === 'trial' && c.trial_ends_at && new Date(c.trial_ends_at) > new Date()
+    ).length;
+    const expiredTrials = customers.rows.filter(c => 
+      c.subscription_status === 'trial' && c.trial_ends_at && new Date(c.trial_ends_at) <= new Date()
+    ).length;
+    const paidCustomers = customers.rows.filter(c => c.subscription_status === 'active').length;
 
-      <div class="section">
-        <h2>Step 4: View Documents</h2>
-        <button onclick="viewDocuments()">View All Documents</button>
-        <div id="docs-result" class="result" style="display:none;"></div>
-      </div>
-
-      <script>
-        async function createCustomer() {
-          const result = document.getElementById('customer-result');
-          result.style.display = 'block';
-          result.innerHTML = 'Creating customer...';
+    res.send(`
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Admin Dashboard - AutoReplyChat</title>
+        <style>
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f1f5f9;
+            color: #1e293b;
+          }
+          .header {
+            background: #0f172a;
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+          }
+          .header h1 { font-size: 22px; }
+          .header .brand { color: #f59e0b; }
+          .container { max-width: 1200px; margin: 0 auto; padding: 30px; }
           
-          try {
-            const response = await fetch('/api/admin/create-customer', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                name: 'Test Business',
-                email: 'test@example.com',
-                businessEmail: '${testEmail}'
-              })
-            });
+          .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 30px;
+          }
+          .stat-card {
+            background: white;
+            padding: 24px;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+          }
+          .stat-card .label { font-size: 13px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+          .stat-card .value { font-size: 36px; font-weight: 700; margin-top: 8px; }
+          .stat-card .value.green { color: #16a34a; }
+          .stat-card .value.amber { color: #d97706; }
+          .stat-card .value.red { color: #dc2626; }
+          .stat-card .value.blue { color: #2563eb; }
+          
+          .table-card {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            overflow: hidden;
+          }
+          .table-card h2 {
+            padding: 20px 24px;
+            font-size: 18px;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          table { width: 100%; border-collapse: collapse; }
+          th {
+            text-align: left;
+            padding: 12px 16px;
+            background: #f8fafc;
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #64748b;
+            border-bottom: 1px solid #e2e8f0;
+          }
+          td {
+            padding: 14px 16px;
+            font-size: 14px;
+            border-bottom: 1px solid #f1f5f9;
+          }
+          tr:hover { background: #f8fafc; }
+          
+          .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 600;
+          }
+          .badge-trial { background: #fef3c7; color: #92400e; }
+          .badge-active { background: #dcfce7; color: #166534; }
+          .badge-expired { background: #fee2e2; color: #991b1b; }
+          .badge-cancelled { background: #e2e8f0; color: #475569; }
+          
+          .days-left { font-size: 12px; color: #64748b; }
+          .days-left.urgent { color: #dc2626; font-weight: 600; }
+          
+          .no-data { padding: 40px; text-align: center; color: #94a3b8; }
+          
+          .actions { display: flex; gap: 8px; }
+          .btn-sm {
+            padding: 4px 12px;
+            border: none;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: 500;
+          }
+          .btn-view { background: #e0f2fe; color: #0369a1; }
+          .btn-view:hover { background: #bae6fd; }
+          .btn-extend { background: #dcfce7; color: #166534; }
+          .btn-extend:hover { background: #bbf7d0; }
+          .btn-danger { background: #fee2e2; color: #991b1b; }
+          .btn-danger:hover { background: #fecaca; }
+
+          .refresh-btn {
+            background: #f59e0b;
+            color: #0f172a;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 13px;
+          }
+          .refresh-btn:hover { background: #fbbf24; }
+          
+          .toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: white;
+            font-weight: 500;
+            display: none;
+            z-index: 100;
+          }
+          .toast.success { background: #16a34a; display: block; }
+          .toast.error { background: #dc2626; display: block; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <h1><span class="brand">AutoReplyChat</span> Admin</h1>
+          <button class="refresh-btn" onclick="location.reload()">↻ Refresh</button>
+        </div>
+        
+        <div class="container">
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="label">Total Customers</div>
+              <div class="value blue">${totalCustomers}</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Active Trials</div>
+              <div class="value amber">${activeTrials}</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Expired Trials</div>
+              <div class="value red">${expiredTrials}</div>
+            </div>
+            <div class="stat-card">
+              <div class="label">Paid Customers</div>
+              <div class="value green">${paidCustomers}</div>
+            </div>
+          </div>
+
+          <div class="table-card">
+            <h2>All Customers</h2>
+            ${customers.rows.length === 0 ? '<div class="no-data">No customers yet</div>' : `
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Name</th>
+                  <th>Email</th>
+                  <th>Status</th>
+                  <th>Trial</th>
+                  <th>Signed Up</th>
+                  <th>Last Login</th>
+                  <th>Bots</th>
+                  <th>Docs</th>
+                  <th>Leads</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${customers.rows.map(c => {
+                  const status = c.subscription_status || 'trial';
+                  const trialEnd = c.trial_ends_at ? new Date(c.trial_ends_at) : null;
+                  const now = new Date();
+                  const daysLeft = trialEnd ? Math.ceil((trialEnd - now) / (1000 * 60 * 60 * 24)) : null;
+                  const isExpired = daysLeft !== null && daysLeft <= 0;
+                  const isUrgent = daysLeft !== null && daysLeft > 0 && daysLeft <= 7;
+                  
+                  let badgeClass = 'badge-trial';
+                  let badgeText = 'Trial';
+                  if (status === 'active') { badgeClass = 'badge-active'; badgeText = 'Paid'; }
+                  else if (status === 'cancelled') { badgeClass = 'badge-cancelled'; badgeText = 'Cancelled'; }
+                  else if (isExpired) { badgeClass = 'badge-expired'; badgeText = 'Expired'; }
+                  
+                  return `
+                    <tr>
+                      <td>${c.id}</td>
+                      <td><strong>${c.name || '—'}</strong></td>
+                      <td>${c.email || '—'}<br><small style="color:#94a3b8">${c.business_email || ''}</small></td>
+                      <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+                      <td>
+                        ${daysLeft !== null 
+                          ? (isExpired 
+                            ? '<span class="days-left urgent">Expired</span>'
+                            : `<span class="days-left ${isUrgent ? 'urgent' : ''}">${daysLeft} days left</span>`)
+                          : '<span class="days-left">No trial</span>'
+                        }
+                      </td>
+                      <td>${c.created_at ? new Date(c.created_at).toLocaleDateString('en-GB') : '—'}</td>
+                      <td>${c.last_login ? new Date(c.last_login).toLocaleDateString('en-GB') : 'Never'}</td>
+                      <td>${c.bot_count}</td>
+                      <td>${c.doc_count}</td>
+                      <td>${c.lead_count}</td>
+                      <td>
+                        <div class="actions">
+                          <button class="btn-sm btn-view" onclick="viewCustomer(${c.id})">View</button>
+                          <button class="btn-sm btn-extend" onclick="extendTrial(${c.id})">+30d</button>
+                        </div>
+                      </td>
+                    </tr>
+                  `;
+                }).join('')}
+              </tbody>
+            </table>
+            `}
+          </div>
+        </div>
+
+        <div id="toast" class="toast"></div>
+
+        <script>
+          const adminKey = new URLSearchParams(window.location.search).get('key');
+
+          function showToast(message, type) {
+            const toast = document.getElementById('toast');
+            toast.textContent = message;
+            toast.className = 'toast ' + type;
+            setTimeout(() => { toast.className = 'toast'; }, 3000);
+          }
+
+          async function viewCustomer(id) {
+            window.open('/api/dashboard/' + id + '?admin=true', '_blank');
+          }
+
+          async function extendTrial(customerId) {
+            if (!confirm('Extend trial by 30 days?')) return;
             
-            const data = await response.json();
-            result.innerHTML = JSON.stringify(data, null, 2);
-          } catch (error) {
-            result.innerHTML = 'Error: ' + error.message;
+            try {
+              const response = await fetch('/api/admin/extend-trial', {
+                method: 'POST',
+                headers: { 
+                  'Content-Type': 'application/json',
+                  'X-Admin-Key': adminKey
+                },
+                body: JSON.stringify({ customerId })
+              });
+              
+              const data = await response.json();
+              if (data.success) {
+                showToast('Trial extended by 30 days', 'success');
+                setTimeout(() => location.reload(), 1000);
+              } else {
+                showToast(data.error || 'Failed', 'error');
+              }
+            } catch (error) {
+              showToast('Error: ' + error.message, 'error');
+            }
           }
-        }
-
-        async function uploadContent() {
-          const content = document.getElementById('content').value;
-          const result = document.getElementById('upload-result');
-          result.style.display = 'block';
-          result.innerHTML = 'Uploading...';
-          
-          try {
-            const response = await fetch('/api/content/text', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                customerId: 1,
-                title: 'Test Content',
-                content: content
-              })
-            });
-            
-            const data = await response.json();
-            result.innerHTML = JSON.stringify(data, null, 2);
-          } catch (error) {
-            result.innerHTML = 'Error: ' + error.message;
-          }
-        }
-
-        async function testChat() {
-          const question = document.getElementById('question').value;
-          const result = document.getElementById('chat-result');
-          result.style.display = 'block';
-          result.innerHTML = 'Thinking...';
-          
-          try {
-            const response = await fetch('/api/chat', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                message: question,
-                customerId: 1,
-                conversationHistory: []
-              })
-            });
-            
-            const data = await response.json();
-            result.innerHTML = 'Question: ' + question + '\\n\\nAnswer: ' + data.message + '\\n\\nUsed Context: ' + (data.contextUsed ? 'Yes ✓' : 'No');
-          } catch (error) {
-            result.innerHTML = 'Error: ' + error.message;
-          }
-        }
-
-        async function viewDocuments() {
-          const result = document.getElementById('docs-result');
-          result.style.display = 'block';
-          result.innerHTML = 'Loading...';
-          
-          try {
-            const response = await fetch('/api/content/1');
-            const data = await response.json();
-            result.innerHTML = JSON.stringify(data, null, 2);
-          } catch (error) {
-            result.innerHTML = 'Error: ' + error.message;
-          }
-        }
-      </script>
-    </body>
-    </html>
-  `);
+        </script>
+      </body>
+      </html>
+    `);
+  } catch (error) {
+    console.error('Admin dashboard error:', error);
+    res.status(500).json({ error: 'Failed to load admin dashboard' });
+  }
 });
 
-// POST /api/admin/create-customer - Create test customer
-router.post('/create-customer', async (req, res) => {
+// POST /api/admin/extend-trial - Extend a customer's trial by 30 days
+router.post('/extend-trial', requireAdminAuth, async (req, res) => {
+  try {
+    const { customerId } = req.body;
+    
+    await query(`
+      UPDATE customers 
+      SET trial_ends_at = GREATEST(COALESCE(trial_ends_at, NOW()), NOW()) + INTERVAL '30 days',
+          subscription_status = 'trial'
+      WHERE id = $1
+    `, [customerId]);
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Extend trial error:', error);
+    res.status(500).json({ error: 'Failed to extend trial' });
+  }
+});
+
+// POST /api/admin/create-customer - Create test customer (legacy)
+router.post('/create-customer', requireAdminAuth, async (req, res) => {
   try {
     const { name, email, businessEmail } = req.body;
     
-    // Check if customer already exists
     const existing = await query('SELECT id FROM customers WHERE id = 1');
     
     if (existing.rows.length > 0) {
       return res.json({ success: true, message: 'Customer already exists', customerId: 1 });
     }
     
-    // Create customer with ID = 1
     await query(
       `INSERT INTO customers (id, name, email, business_email) VALUES (1, $1, $2, $3)`,
       [name, email, businessEmail]
