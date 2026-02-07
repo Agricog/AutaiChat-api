@@ -89,7 +89,7 @@ router.get('/:customerId', async (req, res) => {
     const userMessageBg = currentBot.user_message_bg || '#3b82f6';
     const botMessageBg = currentBot.bot_message_bg || '#f3f4f6';
     const sendButtonBg = currentBot.send_button_bg || '#3b82f6';
-    const leadFormMessage = currentBot.lead_form_message || 'Want personalized help? Leave your details and we\\'ll follow up';
+    const leadFormMessage = currentBot.lead_form_message || "Want personalized help? Leave your details and we'll follow up";
     
     // Get document count for current bot
     const docCountResult = await query(
