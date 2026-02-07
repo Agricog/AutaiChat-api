@@ -39,7 +39,7 @@ router.get('/:botId/settings', async (req, res) => {
     const result = await query(
       `SELECT id, name, greeting_message, header_title, header_color, text_color, lead_capture_enabled,
               chat_bubble_bg, avatar_bg, button_style, button_position, button_size, bar_message,
-              chat_window_bg, user_message_bg, bot_message_bg, send_button_bg
+              chat_window_bg, user_message_bg, bot_message_bg, send_button_bg, lead_form_message
        FROM bots WHERE id = $1`,
       [botId]
     );
@@ -67,7 +67,8 @@ router.get('/:botId/settings', async (req, res) => {
       chatWindowBg: bot.chat_window_bg || '#ffffff',
       userMessageBg: bot.user_message_bg || '#3b82f6',
       botMessageBg: bot.bot_message_bg || '#f3f4f6',
-      sendButtonBg: bot.send_button_bg || '#3b82f6'
+      sendButtonBg: bot.send_button_bg || '#3b82f6',
+      leadFormMessage: bot.lead_form_message || 'Want personalized help? Leave your details and we\'ll follow up'
     });
   } catch (error) {
     console.error('Get bot settings error:', error);
@@ -260,6 +261,39 @@ router.post('/:botId/lead-capture', async (req, res) => {
   } catch (error) {
     console.error('Update lead capture error:', error);
     res.status(500).json({ error: 'Failed to update lead capture setting' });
+  }
+});
+
+// POST /api/bots/:botId/lead-form-message - Update lead form message
+router.post('/:botId/lead-form-message', async (req, res) => {
+  try {
+    const botId = parseInt(req.params.botId);
+    const { customerId, message } = req.body;
+    
+    // Verify session
+    if (parseInt(customerId) !== req.session.customerId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Check bot belongs to customer
+    const botCheck = await query(
+      'SELECT id FROM bots WHERE id = $1 AND customer_id = $2',
+      [botId, customerId]
+    );
+    
+    if (botCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Bot not found' });
+    }
+    
+    await query(
+      'UPDATE bots SET lead_form_message = $1 WHERE id = $2',
+      [message, botId]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update lead form message error:', error);
+    res.status(500).json({ error: 'Failed to update lead form message' });
   }
 });
 
