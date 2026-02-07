@@ -17,13 +17,26 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    // Get bot configuration
+    // Get bot configuration - support both numeric id and public_id
     let botConfig;
     if (botId) {
-      const botResult = await query(
-        'SELECT id, customer_id, bot_instructions FROM bots WHERE id = $1',
+      // First try as public_id (string)
+      let botResult = await query(
+        'SELECT id, customer_id, bot_instructions FROM bots WHERE public_id = $1',
         [botId]
       );
+      
+      // If not found, try as numeric id (for backwards compatibility)
+      if (botResult.rows.length === 0) {
+        const numericId = parseInt(botId);
+        if (!isNaN(numericId)) {
+          botResult = await query(
+            'SELECT id, customer_id, bot_instructions FROM bots WHERE id = $1',
+            [numericId]
+          );
+        }
+      }
+      
       if (botResult.rows.length > 0) {
         botConfig = botResult.rows[0];
       }
@@ -121,13 +134,24 @@ router.post('/lead', async (req, res) => {
       return res.status(400).json({ error: 'Name and email are required' });
     }
 
-    // Get bot info
-    let actualBotId = botId;
+    // Get bot info - support both numeric id and public_id
+    let actualBotId;
     let actualCustomerId = customerId;
 
-    if (botId && !customerId) {
-      const botResult = await query('SELECT customer_id FROM bots WHERE id = $1', [botId]);
+    if (botId) {
+      // First try as public_id
+      let botResult = await query('SELECT id, customer_id FROM bots WHERE public_id = $1', [botId]);
+      
+      // If not found, try as numeric id
+      if (botResult.rows.length === 0) {
+        const numericId = parseInt(botId);
+        if (!isNaN(numericId)) {
+          botResult = await query('SELECT id, customer_id FROM bots WHERE id = $1', [numericId]);
+        }
+      }
+      
       if (botResult.rows.length > 0) {
+        actualBotId = botResult.rows[0].id;
         actualCustomerId = botResult.rows[0].customer_id;
       }
     }
@@ -137,7 +161,7 @@ router.post('/lead', async (req, res) => {
     const leadId = leadResult?.id;
 
     // Update chat session with visitor info
-    if (sessionId) {
+    if (sessionId && actualBotId) {
       await query(
         'UPDATE chat_sessions SET visitor_name = $1, visitor_email = $2 WHERE session_id = $3 AND bot_id = $4',
         [name, email, sessionId, actualBotId]
@@ -153,35 +177,37 @@ router.post('/lead', async (req, res) => {
     }
 
     // Get customer info for email notification
-    const customerResult = await query(
-      'SELECT c.email as owner_email, c.name as owner_name, b.name as bot_name FROM customers c JOIN bots b ON b.customer_id = c.id WHERE b.id = $1',
-      [actualBotId]
-    );
+    if (actualBotId) {
+      const customerResult = await query(
+        'SELECT c.email as owner_email, c.name as owner_name, b.name as bot_name FROM customers c JOIN bots b ON b.customer_id = c.id WHERE b.id = $1',
+        [actualBotId]
+      );
 
-    if (customerResult.rows.length > 0) {
-      const { owner_email, owner_name, bot_name } = customerResult.rows[0];
+      if (customerResult.rows.length > 0) {
+        const { owner_email, owner_name, bot_name } = customerResult.rows[0];
 
-      // Send email notification
-      try {
-        await resend.emails.send({
-          from: 'AutoReplyChat <notifications@autoreplychat.com>',
-          to: owner_email,
-          subject: `New lead captured: ${name}`,
-          html: `
-            <h2>New Lead from ${bot_name}</h2>
-            <p><strong>Name:</strong> ${name}</p>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
-            ${conversation ? `
-              <h3>Conversation:</h3>
-              ${conversation.map(msg => `
-                <p><strong>${msg.role === 'user' ? 'Visitor' : 'Bot'}:</strong> ${msg.content}</p>
-              `).join('')}
-            ` : ''}
-          `
-        });
-      } catch (emailError) {
-        console.error('Failed to send lead notification email:', emailError);
+        // Send email notification
+        try {
+          await resend.emails.send({
+            from: 'AutoReplyChat <notifications@autoreplychat.com>',
+            to: owner_email,
+            subject: `New lead captured: ${name}`,
+            html: `
+              <h2>New Lead from ${bot_name}</h2>
+              <p><strong>Name:</strong> ${name}</p>
+              <p><strong>Email:</strong> ${email}</p>
+              <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
+              ${conversation ? `
+                <h3>Conversation:</h3>
+                ${conversation.map(msg => `
+                  <p><strong>${msg.role === 'user' ? 'Visitor' : 'Bot'}:</strong> ${msg.content}</p>
+                `).join('')}
+              ` : ''}
+            `
+          });
+        } catch (emailError) {
+          console.error('Failed to send lead notification email:', emailError);
+        }
       }
     }
 
