@@ -15,14 +15,14 @@ export async function generateEmbedding(text) {
 }
 
 // Store document chunks with embeddings
-export async function storeDocument({ customerId, title, contentType, sourceUrl, content, metadata = {} }) {
+export async function storeDocument({ customerId, botId, title, contentType, sourceUrl, content, metadata = {} }) {
   try {
     // Insert document
     const docResult = await query(
-      `INSERT INTO documents (customer_id, title, content_type, source_url, content, metadata)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO documents (customer_id, bot_id, title, content_type, source_url, content, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
-      [customerId, title, contentType, sourceUrl, content, JSON.stringify(metadata)]
+      [customerId, botId || null, title, contentType, sourceUrl, content, JSON.stringify(metadata)]
     );
     
     const documentId = docResult.rows[0].id;
@@ -41,9 +41,9 @@ export async function storeDocument({ customerId, title, contentType, sourceUrl,
       
       // For now, storing without embeddings (keyword search)
       await query(
-        `INSERT INTO embeddings (customer_id, document_id, chunk_text, metadata)
-         VALUES ($1, $2, $3, $4)`,
-        [customerId, documentId, chunk, JSON.stringify(chunkMetadata)]
+        `INSERT INTO embeddings (customer_id, bot_id, document_id, chunk_text, metadata)
+         VALUES ($1, $2, $3, $4, $5)`,
+        [customerId, botId || null, documentId, chunk, JSON.stringify(chunkMetadata)]
       );
     }
     
@@ -57,31 +57,61 @@ export async function storeDocument({ customerId, title, contentType, sourceUrl,
 }
 
 // Retrieve relevant context for a query
-export async function retrieveContext(customerId, userQuery, limit = 5) {
+export async function retrieveContext(customerId, userQuery, limit = 5, botId = null) {
   try {
     // Simple keyword-based search for now
     // In production, use vector similarity search with embeddings
-    const result = await query(
-      `SELECT chunk_text, metadata
-       FROM embeddings
-       WHERE customer_id = $1
-       AND chunk_text ILIKE $2
-       ORDER BY created_at DESC
-       LIMIT $3`,
-      [customerId, `%${userQuery}%`, limit]
-    );
     
-    // If no keyword matches, return recent chunks
-    if (result.rows.length === 0) {
-      const fallbackResult = await query(
+    let result;
+    
+    if (botId) {
+      // Bot-specific search
+      result = await query(
+        `SELECT chunk_text, metadata
+         FROM embeddings
+         WHERE bot_id = $1
+         AND chunk_text ILIKE $2
+         ORDER BY created_at DESC
+         LIMIT $3`,
+        [botId, `%${userQuery}%`, limit]
+      );
+      
+      // If no keyword matches, return recent chunks for this bot
+      if (result.rows.length === 0) {
+        const fallbackResult = await query(
+          `SELECT chunk_text, metadata
+           FROM embeddings
+           WHERE bot_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2`,
+          [botId, limit]
+        );
+        return fallbackResult.rows.map(row => row.chunk_text);
+      }
+    } else {
+      // Legacy customer-based search
+      result = await query(
         `SELECT chunk_text, metadata
          FROM embeddings
          WHERE customer_id = $1
+         AND chunk_text ILIKE $2
          ORDER BY created_at DESC
-         LIMIT $2`,
-        [customerId, limit]
+         LIMIT $3`,
+        [customerId, `%${userQuery}%`, limit]
       );
-      return fallbackResult.rows.map(row => row.chunk_text);
+      
+      // If no keyword matches, return recent chunks
+      if (result.rows.length === 0) {
+        const fallbackResult = await query(
+          `SELECT chunk_text, metadata
+           FROM embeddings
+           WHERE customer_id = $1
+           ORDER BY created_at DESC
+           LIMIT $2`,
+          [customerId, limit]
+        );
+        return fallbackResult.rows.map(row => row.chunk_text);
+      }
     }
     
     return result.rows.map(row => row.chunk_text);
@@ -116,13 +146,13 @@ function chunkText(text, maxChunkSize = 500) {
 }
 
 // Store lead in database
-export async function storeLead({ customerId, name, email, conversation }) {
+export async function storeLead({ customerId, botId, name, email, conversation }) {
   try {
     const result = await query(
-      `INSERT INTO leads (customer_id, name, email, conversation)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO leads (customer_id, bot_id, name, email, conversation)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id`,
-      [customerId, name, email, JSON.stringify(conversation)]
+      [customerId, botId || null, name, email, JSON.stringify(conversation)]
     );
     
     return result.rows[0].id;
