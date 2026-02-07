@@ -68,6 +68,18 @@ export async function runMigrations() {
       ALTER TABLE customers 
       ADD COLUMN IF NOT EXISTS bot_instructions TEXT
     `);
+
+    // Add trial_ends_at column to customers table
+    await query(`
+      ALTER TABLE customers 
+      ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP
+    `);
+
+    // Add subscription_status column to customers table
+    await query(`
+      ALTER TABLE customers 
+      ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(20) DEFAULT 'trial'
+    `);
     
     // Insert test account if doesn't exist
     await query(`
