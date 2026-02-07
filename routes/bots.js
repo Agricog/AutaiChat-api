@@ -1,7 +1,13 @@
 import express from 'express';
+import crypto from 'crypto';
 import { query } from '../db/database.js';
 
 const router = express.Router();
+
+// Generate random public ID
+function generatePublicId() {
+  return crypto.randomBytes(12).toString('hex');
+}
 
 // POST /api/bots - Create a new bot
 router.post('/', async (req, res) => {
@@ -17,14 +23,16 @@ router.post('/', async (req, res) => {
       return res.status(403).json({ error: 'Unauthorized' });
     }
     
+    const publicId = generatePublicId();
+    
     const result = await query(
-      `INSERT INTO bots (customer_id, name, bot_instructions) 
-       VALUES ($1, $2, 'You are a helpful assistant.')
-       RETURNING id`,
-      [customerId, name]
+      `INSERT INTO bots (customer_id, name, public_id, bot_instructions) 
+       VALUES ($1, $2, $3, 'You are a helpful assistant.')
+       RETURNING id, public_id`,
+      [customerId, name, publicId]
     );
     
-    res.json({ success: true, botId: result.rows[0].id });
+    res.json({ success: true, botId: result.rows[0].id, publicId: result.rows[0].public_id });
   } catch (error) {
     console.error('Create bot error:', error);
     res.status(500).json({ error: 'Failed to create bot' });
