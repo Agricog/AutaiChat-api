@@ -48,7 +48,7 @@ router.get('/:customerId', async (req, res) => {
     
     // Get all bots for this customer
     const botsResult = await query(
-      'SELECT id, name, bot_instructions, greeting_message, created_at FROM bots WHERE customer_id = $1 ORDER BY created_at ASC',
+      'SELECT id, name, bot_instructions, greeting_message, header_title, header_color, text_color, created_at FROM bots WHERE customer_id = $1 ORDER BY created_at ASC',
       [customerId]
     );
     
@@ -73,6 +73,9 @@ router.get('/:customerId', async (req, res) => {
     const botId = currentBot.id;
     const botInstructions = currentBot.bot_instructions || '';
     const greetingMessage = currentBot.greeting_message || 'Thank you for visiting! How may we assist you today?';
+    const headerTitle = currentBot.header_title || 'Support Assistant';
+    const headerColor = currentBot.header_color || '#3b82f6';
+    const textColor = currentBot.text_color || '#ffffff';
     
     // Get document count for current bot
     const docCountResult = await query(
@@ -966,6 +969,10 @@ router.get('/:customerId', async (req, res) => {
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 Bot Behavior
               </li>
+              <li class="nav-item ${activeTab === 'appearance' ? 'active' : ''}" onclick="switchTab('appearance')">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01"/></svg>
+                Appearance
+              </li>
               <li class="nav-item ${activeTab === 'deploy' ? 'active' : ''}" onclick="switchTab('deploy')">
                 <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"/></svg>
                 Deploy
@@ -1257,6 +1264,67 @@ router.get('/:customerId', async (req, res) => {
               </div>
             </div>
             
+            <!-- Appearance Tab -->
+            <div id="tab-appearance" class="tab-panel">
+              <div class="content-card">
+                <div class="content-card-header">
+                  <h3>Widget Appearance</h3>
+                </div>
+                <div class="content-card-body">
+                  <div class="form-group">
+                    <label class="form-label">Header Title</label>
+                    <input type="text" id="headerTitle" class="form-input" value="${headerTitle}" placeholder="Support Assistant" />
+                    <div class="form-help">The title shown at the top of the chat widget.</div>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label class="form-label">Header Color</label>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                      <input type="color" id="headerColor" value="${headerColor}" style="width: 60px; height: 40px; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer;" />
+                      <input type="text" id="headerColorText" class="form-input" value="${headerColor}" style="width: 120px;" onchange="document.getElementById('headerColor').value = this.value" />
+                    </div>
+                    <div class="form-help">Background color of the header and buttons.</div>
+                  </div>
+                  
+                  <div class="form-group">
+                    <label class="form-label">Text Color</label>
+                    <div style="display: flex; gap: 12px; align-items: center;">
+                      <div style="display: flex; gap: 8px;">
+                        <button type="button" id="textWhite" class="btn ${textColor === '#ffffff' ? 'btn-primary' : 'btn-secondary'}" onclick="setTextColor('#ffffff')" style="padding: 8px 16px;">White</button>
+                        <button type="button" id="textBlack" class="btn ${textColor === '#000000' ? 'btn-primary' : 'btn-secondary'}" onclick="setTextColor('#000000')" style="padding: 8px 16px;">Black</button>
+                      </div>
+                      <input type="hidden" id="textColor" value="${textColor}" />
+                    </div>
+                    <div class="form-help">Color of text in the header.</div>
+                  </div>
+                  
+                  <div style="margin-top: 24px; padding: 20px; background: #f8fafc; border-radius: 12px;">
+                    <label class="form-label" style="margin-bottom: 12px;">Preview</label>
+                    <div id="previewWidget" style="width: 300px; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
+                      <div id="previewHeader" style="background: ${headerColor}; color: ${textColor}; padding: 16px;">
+                        <div style="font-weight: 600;" id="previewTitle">${headerTitle}</div>
+                        <div style="font-size: 12px; opacity: 0.8;">Ask us anything</div>
+                      </div>
+                      <div style="background: #f9fafb; padding: 20px; min-height: 100px;">
+                        <div style="text-align: center; color: #9ca3af; font-size: 14px;">Chat messages appear here</div>
+                      </div>
+                      <div style="background: white; padding: 12px; border-top: 1px solid #e5e7eb;">
+                        <div style="display: flex; gap: 8px;">
+                          <div style="flex: 1; padding: 8px 12px; background: #f1f5f9; border-radius: 8px; color: #94a3b8; font-size: 14px;">Ask a question...</div>
+                          <div id="previewSendBtn" style="background: ${headerColor}; color: ${textColor}; padding: 8px 12px; border-radius: 8px;">➤</div>
+                        </div>
+                        <div style="text-align: center; margin-top: 8px;">
+                          <span style="font-size: 11px; color: #9ca3af;">Powered by AutoReplyChat</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <button class="btn btn-primary" style="margin-top: 20px;" onclick="handleAppearanceUpdate()">Save Appearance</button>
+                </div>
+              </div>
+            </div>
+            
             <!-- Deploy Tab -->
             <div id="tab-deploy" class="tab-panel">
               <div class="embed-section">
@@ -1336,6 +1404,7 @@ router.get('/:customerId', async (req, res) => {
             leads: 'Leads',
             messages: 'Messages',
             behavior: 'Bot Behavior',
+            appearance: 'Appearance',
             deploy: 'Deploy'
           };
           
@@ -1586,6 +1655,51 @@ router.get('/:customerId', async (req, res) => {
                 body: JSON.stringify({ customerId, greeting })
               });
               if (response.ok) showSuccess('Greeting saved!');
+              else showError('Failed to save');
+            } catch (error) {
+              showError('Network error');
+            }
+          }
+          
+          function setTextColor(color) {
+            document.getElementById('textColor').value = color;
+            document.getElementById('textWhite').className = color === '#ffffff' ? 'btn btn-primary' : 'btn btn-secondary';
+            document.getElementById('textBlack').className = color === '#000000' ? 'btn btn-primary' : 'btn btn-secondary';
+            updatePreview();
+          }
+          
+          function updatePreview() {
+            const headerColor = document.getElementById('headerColor').value;
+            const textColor = document.getElementById('textColor').value;
+            const headerTitle = document.getElementById('headerTitle').value;
+            
+            document.getElementById('previewHeader').style.background = headerColor;
+            document.getElementById('previewHeader').style.color = textColor;
+            document.getElementById('previewTitle').textContent = headerTitle || 'Support Assistant';
+            document.getElementById('previewSendBtn').style.background = headerColor;
+            document.getElementById('previewSendBtn').style.color = textColor;
+          }
+          
+          // Add event listeners for live preview
+          document.getElementById('headerColor')?.addEventListener('input', function() {
+            document.getElementById('headerColorText').value = this.value;
+            updatePreview();
+          });
+          
+          document.getElementById('headerTitle')?.addEventListener('input', updatePreview);
+          
+          async function handleAppearanceUpdate() {
+            const headerTitle = document.getElementById('headerTitle').value;
+            const headerColor = document.getElementById('headerColor').value;
+            const textColor = document.getElementById('textColor').value;
+            
+            try {
+              const response = await fetch('/api/bots/' + botId + '/appearance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ customerId, headerTitle, headerColor, textColor })
+              });
+              if (response.ok) showSuccess('Appearance saved!');
               else showError('Failed to save');
             } catch (error) {
               showError('Network error');
