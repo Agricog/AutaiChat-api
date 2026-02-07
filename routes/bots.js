@@ -240,4 +240,37 @@ router.post('/:botId/lead-capture', async (req, res) => {
   }
 });
 
+// POST /api/bots/:botId/notifications - Update notification settings
+router.post('/:botId/notifications', async (req, res) => {
+  try {
+    const botId = parseInt(req.params.botId);
+    const { customerId, enabled, emails } = req.body;
+    
+    // Verify session
+    if (parseInt(customerId) !== req.session.customerId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Check bot belongs to customer
+    const botCheck = await query(
+      'SELECT id FROM bots WHERE id = $1 AND customer_id = $2',
+      [botId, customerId]
+    );
+    
+    if (botCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Bot not found' });
+    }
+    
+    await query(
+      'UPDATE bots SET conversation_notifications = $1, notification_emails = $2 WHERE id = $3',
+      [enabled, emails, botId]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update notifications error:', error);
+    res.status(500).json({ error: 'Failed to update notification settings' });
+  }
+});
+
 export default router;
