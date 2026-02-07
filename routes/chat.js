@@ -13,29 +13,63 @@ const anthropic = new Anthropic({
 // POST /api/chat - Handle chat messages with RAG
 router.post('/', async (req, res) => {
   try {
-    const { message, customerId, conversationHistory, leadId } = req.body;
+    const { message, botId, customerId, conversationHistory, leadId } = req.body;
     
     if (!message) {
       return res.status(400).json({ error: 'Message is required' });
     }
 
-    const cid = customerId || 1;
+    // Support both botId (new) and customerId (legacy)
+    let bot;
+    let cid;
+    
+    if (botId) {
+      // New bot-based lookup
+      const botResult = await query(
+        'SELECT id, customer_id, bot_instructions FROM bots WHERE id = $1',
+        [botId]
+      );
+      
+      if (botResult.rows.length === 0) {
+        return res.status(404).json({ error: 'Bot not found' });
+      }
+      
+      bot = botResult.rows[0];
+      cid = bot.customer_id;
+    } else {
+      // Legacy customer-based lookup - get first bot for customer
+      cid = customerId || 1;
+      const botResult = await query(
+        'SELECT id, customer_id, bot_instructions FROM bots WHERE customer_id = $1 ORDER BY created_at ASC LIMIT 1',
+        [cid]
+      );
+      
+      if (botResult.rows.length > 0) {
+        bot = botResult.rows[0];
+      } else {
+        // Fallback to customer's bot_instructions if no bot exists
+        const customerResult = await query(
+          'SELECT bot_instructions FROM customers WHERE id = $1',
+          [cid]
+        );
+        bot = { 
+          id: null, 
+          customer_id: cid, 
+          bot_instructions: customerResult.rows[0]?.bot_instructions || '' 
+        };
+      }
+    }
+
+    const botInstructions = bot.bot_instructions || '';
 
     // Save user message to database
     await query(
-      'INSERT INTO messages (customer_id, lead_id, role, content) VALUES ($1, $2, $3, $4)',
-      [cid, leadId || null, 'user', message]
+      'INSERT INTO messages (customer_id, bot_id, lead_id, role, content) VALUES ($1, $2, $3, $4, $5)',
+      [cid, bot.id, leadId || null, 'user', message]
     );
 
-    // Get customer's bot instructions
-    const customerResult = await query(
-      'SELECT bot_instructions FROM customers WHERE id = $1',
-      [cid]
-    );
-    const botInstructions = customerResult.rows[0]?.bot_instructions || '';
-
-    // Retrieve relevant context from customer's knowledge base
-    const context = await retrieveContext(cid, message, 5);
+    // Retrieve relevant context from bot's knowledge base
+    const context = await retrieveContext(cid, message, 5, bot.id);
     
     // Build system prompt with bot instructions and context
     let systemPrompt = botInstructions || 'You are a helpful assistant.';
@@ -65,13 +99,14 @@ router.post('/', async (req, res) => {
 
     // Save assistant response to database
     await query(
-      'INSERT INTO messages (customer_id, lead_id, role, content) VALUES ($1, $2, $3, $4)',
-      [cid, leadId || null, 'assistant', assistantMessage]
+      'INSERT INTO messages (customer_id, bot_id, lead_id, role, content) VALUES ($1, $2, $3, $4, $5)',
+      [cid, bot.id, leadId || null, 'assistant', assistantMessage]
     );
 
     res.json({
       message: assistantMessage,
       conversationId: cid,
+      botId: bot.id,
       contextUsed: context.length > 0
     });
   } catch (error) {
@@ -83,27 +118,55 @@ router.post('/', async (req, res) => {
   }
 });
 
-// POST /api/lead - Capture lead information
+// POST /api/chat/lead - Capture lead information
 router.post('/lead', async (req, res) => {
   try {
-    const { name, email, customerId, conversation } = req.body;
+    const { name, email, botId, customerId, conversation } = req.body;
     
     if (!name || !email) {
       return res.status(400).json({ error: 'Name and email are required' });
     }
 
-    console.log('Lead captured:', { name, email, customerId });
+    // Get bot and customer info
+    let cid;
+    let bid;
+    
+    if (botId) {
+      const botResult = await query(
+        'SELECT id, customer_id FROM bots WHERE id = $1',
+        [botId]
+      );
+      if (botResult.rows.length > 0) {
+        bid = botResult.rows[0].id;
+        cid = botResult.rows[0].customer_id;
+      }
+    }
+    
+    if (!cid) {
+      cid = customerId || 1;
+      // Get first bot for customer
+      const botResult = await query(
+        'SELECT id FROM bots WHERE customer_id = $1 ORDER BY created_at ASC LIMIT 1',
+        [cid]
+      );
+      if (botResult.rows.length > 0) {
+        bid = botResult.rows[0].id;
+      }
+    }
+
+    console.log('Lead captured:', { name, email, customerId: cid, botId: bid });
     
     // Store lead in database
     const leadId = await storeLead({
-      customerId: customerId || 1,
+      customerId: cid,
+      botId: bid,
       name,
       email,
       conversation: conversation || []
     });
 
     // Get customer info for email
-    const customer = await getCustomer(customerId || 1);
+    const customer = await getCustomer(cid);
     const businessEmail = customer?.business_email || process.env.TEST_BUSINESS_EMAIL || 'your-email@example.com';
     
     // Send email notification to business owner
@@ -112,7 +175,7 @@ router.post('/lead', async (req, res) => {
       leadName: name,
       leadEmail: email,
       conversation: conversation || [],
-      customerId: customerId || 'default'
+      customerId: cid
     });
 
     if (!emailResult.success) {
