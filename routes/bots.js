@@ -37,7 +37,9 @@ router.get('/:botId/settings', async (req, res) => {
     const botId = parseInt(req.params.botId);
     
     const result = await query(
-      `SELECT id, name, greeting_message, header_title, header_color, text_color, lead_capture_enabled 
+      `SELECT id, name, greeting_message, header_title, header_color, text_color, lead_capture_enabled,
+              chat_bubble_bg, avatar_bg, button_style, button_position, button_size, bar_message,
+              chat_window_bg, user_message_bg, bot_message_bg, send_button_bg
        FROM bots WHERE id = $1`,
       [botId]
     );
@@ -55,7 +57,17 @@ router.get('/:botId/settings', async (req, res) => {
       headerTitle: bot.header_title || 'Support Assistant',
       headerColor: bot.header_color || '#3b82f6',
       textColor: bot.text_color || '#ffffff',
-      leadCaptureEnabled: bot.lead_capture_enabled !== false
+      leadCaptureEnabled: bot.lead_capture_enabled !== false,
+      chatBubbleBg: bot.chat_bubble_bg || '#3b82f6',
+      avatarBg: bot.avatar_bg || '#e0e0e0',
+      buttonStyle: bot.button_style || 'circle',
+      buttonPosition: bot.button_position || 'right',
+      buttonSize: bot.button_size || 60,
+      barMessage: bot.bar_message || 'Chat Now',
+      chatWindowBg: bot.chat_window_bg || '#ffffff',
+      userMessageBg: bot.user_message_bg || '#3b82f6',
+      botMessageBg: bot.bot_message_bg || '#f3f4f6',
+      sendButtonBg: bot.send_button_bg || '#3b82f6'
     });
   } catch (error) {
     console.error('Get bot settings error:', error);
@@ -178,7 +190,11 @@ router.post('/:botId/greeting', async (req, res) => {
 router.post('/:botId/appearance', async (req, res) => {
   try {
     const botId = parseInt(req.params.botId);
-    const { customerId, headerTitle, headerColor, textColor } = req.body;
+    const { 
+      customerId, headerTitle, headerColor, textColor,
+      chatBubbleBg, avatarBg, buttonStyle, buttonPosition, buttonSize, barMessage,
+      chatWindowBg, userMessageBg, botMessageBg, sendButtonBg
+    } = req.body;
     
     // Verify session
     if (parseInt(customerId) !== req.session.customerId) {
@@ -196,8 +212,15 @@ router.post('/:botId/appearance', async (req, res) => {
     }
     
     await query(
-      'UPDATE bots SET header_title = $1, header_color = $2, text_color = $3 WHERE id = $4',
-      [headerTitle, headerColor, textColor, botId]
+      `UPDATE bots SET 
+        header_title = $1, header_color = $2, text_color = $3,
+        chat_bubble_bg = $4, avatar_bg = $5, button_style = $6, button_position = $7, 
+        button_size = $8, bar_message = $9, chat_window_bg = $10, user_message_bg = $11, 
+        bot_message_bg = $12, send_button_bg = $13
+       WHERE id = $14`,
+      [headerTitle, headerColor, textColor, chatBubbleBg, avatarBg, buttonStyle, 
+       buttonPosition, buttonSize, barMessage, chatWindowBg, userMessageBg, 
+       botMessageBg, sendButtonBg, botId]
     );
     
     res.json({ success: true });
