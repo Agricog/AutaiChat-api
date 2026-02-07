@@ -1564,6 +1564,11 @@ router.get('/:customerId', async (req, res) => {
         </div>
         
         <script>
+        const originalFetch = window.fetch;
+window.fetch = function(url, options = {}) {
+  options.credentials = 'include';
+  return originalFetch(url, options);
+};
           const customerId = '${customerId}';
           const botId = '${botId}';
           const publicId = '${publicId}';
