@@ -73,12 +73,13 @@ router.post('/signup', signupLimiter, async (req, res) => {
     const saltRounds = 10;
     const passwordHash = await bcrypt.hash(password, saltRounds);
 
-    // Create customer
+    // Create customer with 30-day trial
+    const trialEndsAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
     const customerResult = await query(
-      `INSERT INTO customers (name, email, business_email)
-       VALUES ($1, $2, $3)
+      `INSERT INTO customers (name, email, business_email, trial_ends_at, subscription_status)
+       VALUES ($1, $2, $3, $4, 'trial')
        RETURNING id`,
-      [name.trim(), email.toLowerCase(), businessEmail.toLowerCase()]
+      [name.trim(), email.toLowerCase(), businessEmail.toLowerCase(), trialEndsAt]
     );
 
     const customerId = customerResult.rows[0].id;
