@@ -15,6 +15,7 @@ import adminRoutes from './routes/admin.js';
 import authRoutes from './routes/auth.js';
 import loginRoute from './routes/login.js';
 import signupRoute from './routes/signup.js';
+import botRoutes from './routes/bots.js';
 
 // Import middleware
 import { requireAuth } from './middleware/auth.js';
@@ -86,6 +87,7 @@ app.get('/health', (req, res) => {
 
 // Auth routes (no auth required)
 app.use('/api/auth', authRoutes);
+app.use('/api/bots', requireAuth, botRoutes);
 
 // Login and signup pages (no auth required)
 app.use('/login', loginRoute);
