@@ -1046,10 +1046,7 @@ Paste these new lines right after `handleWebsiteScrape` and before `handleYoutub
           function openRetrainSchedule() { document.getElementById('retrainModal').style.display = 'flex'; fetch('/api/content/retrain-schedule/' + botId).then(r => r.json()).then(data => { if (data.success) { document.getElementById('retrainFrequency').value = data.frequency || 'none'; document.getElementById('retrainTime').value = data.time || '03:00'; } }).catch(() => {}); }
           function closeRetrainModal() { document.getElementById('retrainModal').style.display = 'none'; }
           async function saveRetrainSchedule() { const frequency = document.getElementById('retrainFrequency').value; const time = document.getElementById('retrainTime').value; try { const response = await fetch('/api/content/retrain-schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, frequency, time }) }); const data = await response.json(); if (response.ok) { closeRetrainModal(); showSuccess(data.message); } else showError(data.error || 'Failed to save'); } catch (error) { showError('Network error'); } }
-```
 
-**BELOW CONTEXT (this already exists, don't duplicate):**
-```
           async function handleYoutubeTranscript() { ...
             
             <!-- Q&A Tab -->
