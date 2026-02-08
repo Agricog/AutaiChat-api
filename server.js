@@ -13,8 +13,6 @@ import dashboardRoutes from './routes/dashboard.js';
 import documentRoutes from './routes/documents.js';
 import adminRoutes from './routes/admin.js';
 import authRoutes from './routes/auth.js';
-import loginRoute from './routes/login.js';
-import signupRoute from './routes/signup.js';
 import botRoutes from './routes/bots.js';
 import stripeRoutes from './routes/stripe.js';
 import { startConversationNotifier } from './services/conversationNotifier.js';
