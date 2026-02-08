@@ -353,7 +353,7 @@ router.get('/:customerId', async (req, res) => {
     
     // Get all bots for this customer
     const botsResult = await query(
-      'SELECT id, public_id, name, bot_instructions, greeting_message, header_title, header_color, text_color, lead_capture_enabled, notification_emails, conversation_notifications, chat_bubble_bg, avatar_bg, button_style, button_position, button_size, bar_message, chat_window_bg, user_message_bg, bot_message_bg, send_button_bg, lead_form_message, created_at FROM bots WHERE customer_id = $1 ORDER BY created_at ASC',
+      'SELECT id, public_id, name, bot_instructions, greeting_message, header_title, header_color, text_color, lead_capture_enabled, notification_emails, conversation_notifications, chat_bubble_bg, avatar_bg, button_style, button_position, button_size, bar_message, chat_window_bg, user_message_bg, bot_message_bg, send_button_bg, lead_form_message, greeting_bubble_enabled, created_at FROM bots WHERE customer_id = $1 ORDER BY created_at ASC',
       [customerId]
     );
     
@@ -396,6 +396,7 @@ router.get('/:customerId', async (req, res) => {
     const botMessageBg = currentBot.bot_message_bg || '#f3f4f6';
     const sendButtonBg = currentBot.send_button_bg || '#3b82f6';
     const leadFormMessage = currentBot.lead_form_message || "Want personalized help? Leave your details and we'll follow up";
+    const greetingBubbleEnabled = currentBot.greeting_bubble_enabled !== false;
     
     // Get document count for current bot
     const docCountResult = await query(
@@ -1010,6 +1011,21 @@ router.get('/:customerId', async (req, res) => {
                 </div>
               </div>
               <div class="content-card">
+                <div class="content-card-header"><h3>Greeting Bubble</h3></div>
+                <div class="content-card-body">
+                  <div class="form-group">
+                    <label class="form-label">Show Greeting Popup</label>
+                    <div style="display: flex; align-items: center; gap: 12px; margin-top: 8px;">
+                      <label style="display: flex; align-items: center; cursor: pointer;">
+                        <input type="checkbox" id="greetingBubbleEnabled" ${greetingBubbleEnabled ? 'checked' : ''} onchange="handleGreetingBubbleToggle()" style="width: 20px; height: 20px; cursor: pointer;" />
+                        <span style="margin-left: 8px; font-weight: 500;">Show greeting message bubble on page load</span>
+                      </label>
+                    </div>
+                    <div class="form-help">When enabled, the greeting message appears in a popup bubble above the chat button when visitors first load the page. It auto-hides after 10 seconds.</div>
+                  </div>
+                </div>
+              </div>
+              <div class="content-card">
                 <div class="content-card-header"><h3>Lead Capture</h3></div>
                 <div class="content-card-body">
                   <div class="form-group"><label class="form-label">Collect Visitor Information</label><div style="display: flex; align-items: center; gap: 12px; margin-top: 8px;"><label style="display: flex; align-items: center; cursor: pointer;"><input type="checkbox" id="leadCaptureEnabled" ${leadCaptureEnabled ? 'checked' : ''} onchange="handleLeadCaptureToggle()" style="width: 20px; height: 20px; cursor: pointer;" /><span style="margin-left: 8px; font-weight: 500;">Enable lead capture form</span></label></div><div class="form-help">When enabled, visitors are asked for their name and email after the first message exchange.</div></div>
@@ -1138,6 +1154,7 @@ router.get('/:customerId', async (req, res) => {
           async function handleQAUpload() { const question = document.getElementById('qaQuestion').value; const answer = document.getElementById('qaAnswer').value; if (!question || !answer) { showError('Please fill in question and answer'); return; } const content = 'Q: ' + question + '\\n\\nA: ' + answer; const title = 'Q&A: ' + question.substring(0, 50) + (question.length > 50 ? '...' : ''); try { const response = await fetch('/api/content/text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, title, content }) }); const data = await response.json(); if (response.ok) { showSuccess('Q&A pair added!'); document.getElementById('qaQuestion').value = ''; document.getElementById('qaAnswer').value = ''; } else showError(data.error || 'Failed to add'); } catch (error) { showError('Network error'); } }
           async function handleBotInstructionsUpdate() { const instructions = document.getElementById('botInstructions').value; try { const response = await fetch('/api/bots/' + botId + '/instructions', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, instructions }) }); if (response.ok) showSuccess('Instructions saved!'); else showError('Failed to save'); } catch (error) { showError('Network error'); } }
           async function handleGreetingUpdate() { const greeting = document.getElementById('greetingMessage').value; try { const response = await fetch('/api/bots/' + botId + '/greeting', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, greeting }) }); if (response.ok) showSuccess('Greeting saved!'); else showError('Failed to save'); } catch (error) { showError('Network error'); } }
+          async function handleGreetingBubbleToggle() { const enabled = document.getElementById('greetingBubbleEnabled').checked; try { const response = await fetch('/api/bots/' + botId + '/greeting-bubble', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, enabled }) }); if (response.ok) showSuccess(enabled ? 'Greeting bubble enabled!' : 'Greeting bubble disabled!'); else showError('Failed to save'); } catch (error) { showError('Network error'); } }
           async function handleLeadCaptureToggle() { const enabled = document.getElementById('leadCaptureEnabled').checked; try { const response = await fetch('/api/bots/' + botId + '/lead-capture', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, enabled }) }); if (response.ok) showSuccess(enabled ? 'Lead capture enabled!' : 'Lead capture disabled!'); else showError('Failed to save'); } catch (error) { showError('Network error'); } }
           async function handleLeadFormMessageUpdate() { const message = document.getElementById('leadFormMessage').value; try { const response = await fetch('/api/bots/' + botId + '/lead-form-message', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, message }) }); if (response.ok) showSuccess('Lead form message saved!'); else showError('Failed to save'); } catch (error) { showError('Network error'); } }
           async function handleNotificationSettingsUpdate() { const enabled = document.getElementById('conversationNotifications').checked; const emails = document.getElementById('notificationEmails').value; if (enabled && !emails.trim()) { showError('Please enter at least one email address'); return; } try { const response = await fetch('/api/bots/' + botId + '/notifications', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, enabled, emails }) }); if (response.ok) showSuccess('Notification settings saved!'); else showError('Failed to save'); } catch (error) { showError('Network error'); } }
