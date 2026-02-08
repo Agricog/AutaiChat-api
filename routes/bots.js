@@ -49,7 +49,8 @@ router.get('/:botId/settings', async (req, res) => {
     const result = await query(
       `SELECT id, public_id, name, greeting_message, header_title, header_color, text_color, lead_capture_enabled,
               chat_bubble_bg, avatar_bg, button_style, button_position, button_size, bar_message,
-              chat_window_bg, user_message_bg, bot_message_bg, send_button_bg, lead_form_message
+              chat_window_bg, user_message_bg, bot_message_bg, send_button_bg, lead_form_message,
+              greeting_bubble_enabled
        FROM bots WHERE ${isNumeric ? 'id = $1' : 'public_id = $1'}`,
       [isNumeric ? parseInt(botIdParam) : botIdParam]
     );
@@ -78,7 +79,8 @@ router.get('/:botId/settings', async (req, res) => {
       userMessageBg: bot.user_message_bg || '#3b82f6',
       botMessageBg: bot.bot_message_bg || '#f3f4f6',
       sendButtonBg: bot.send_button_bg || '#3b82f6',
-      leadFormMessage: bot.lead_form_message || 'Want personalized help? Leave your details and we\'ll follow up'
+      leadFormMessage: bot.lead_form_message || 'Want personalized help? Leave your details and we\'ll follow up',
+      greetingBubbleEnabled: bot.greeting_bubble_enabled !== false
     });
   } catch (error) {
     console.error('Get bot settings error:', error);
@@ -194,6 +196,39 @@ router.post('/:botId/greeting', async (req, res) => {
   } catch (error) {
     console.error('Update greeting error:', error);
     res.status(500).json({ error: 'Failed to update greeting' });
+  }
+});
+
+// POST /api/bots/:botId/greeting-bubble - Toggle greeting bubble
+router.post('/:botId/greeting-bubble', async (req, res) => {
+  try {
+    const botId = parseInt(req.params.botId);
+    const { customerId, enabled } = req.body;
+    
+    // Verify session
+    if (parseInt(customerId) !== req.session.customerId) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+    
+    // Check bot belongs to customer
+    const botCheck = await query(
+      'SELECT id FROM bots WHERE id = $1 AND customer_id = $2',
+      [botId, customerId]
+    );
+    
+    if (botCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Bot not found' });
+    }
+    
+    await query(
+      'UPDATE bots SET greeting_bubble_enabled = $1 WHERE id = $2',
+      [enabled, botId]
+    );
+    
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Update greeting bubble error:', error);
+    res.status(500).json({ error: 'Failed to update greeting bubble setting' });
   }
 });
 
