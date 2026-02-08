@@ -1,8 +1,6 @@
 import express from 'express';
 import { query } from '../db/database.js';
-
 const router = express.Router();
-
 // Helper: Check if customer has active access
 function hasActiveAccess(customer) {
   const status = customer.subscription_status || 'trial';
@@ -17,12 +15,10 @@ function hasActiveAccess(customer) {
   
   return false;
 }
-
 // Helper: Render upgrade page
 function renderUpgradePage(customerId, customer) {
   const trialEnd = customer.trial_ends_at ? new Date(customer.trial_ends_at) : null;
   const daysExpired = trialEnd ? Math.abs(Math.ceil((trialEnd - new Date()) / (1000 * 60 * 60 * 24))) : 0;
-
   return `
     <!DOCTYPE html>
     <html lang="en">
@@ -205,15 +201,12 @@ function renderUpgradePage(customerId, customer) {
             Your 30-day free trial expired ${daysExpired} day${daysExpired !== 1 ? 's' : ''} ago. 
             Subscribe now to restore access to your dashboard, chatbots, and all your training data.
           </p>
-
           <div id="errorMsg" class="error-msg"></div>
-
           <div class="price-block">
             <div class="setup-price">£399</div>
             <div class="setup-label">One-time setup fee (includes first month)</div>
             <div class="monthly-note">Then £99/month · No contract · Cancel anytime</div>
           </div>
-
           <div class="features">
             <div class="feature-item">
               <div class="feature-check">✓</div>
@@ -240,18 +233,15 @@ function renderUpgradePage(customerId, customer) {
               Priority support
             </div>
           </div>
-
           <button class="btn-subscribe" id="subscribeBtn" onclick="handleSubscribe()">
             Subscribe Now — £399
           </button>
-
           <p class="terms">
             You'll be redirected to our secure payment provider (Stripe). 
             Your subscription includes a one-time £399 setup fee (covering setup and your first month), 
             then £99/month. Cancel anytime from your billing portal.
           </p>
         </div>
-
         <div class="footer-links">
           <a href="https://autoreplychat.com">Back to Homepage</a>
           <a href="https://autoreplychat.com/terms">Terms of Service</a>
@@ -259,7 +249,6 @@ function renderUpgradePage(customerId, customer) {
           <a href="#" onclick="logout(); return false;">Sign Out</a>
         </div>
       </div>
-
       <script>
         async function handleSubscribe() {
           const btn = document.getElementById('subscribeBtn');
@@ -268,16 +257,13 @@ function renderUpgradePage(customerId, customer) {
           btn.disabled = true;
           btn.textContent = 'Redirecting to payment...';
           errorMsg.style.display = 'none';
-
           try {
             const response = await fetch('/api/stripe/create-checkout', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               credentials: 'include'
             });
-
             const data = await response.json();
-
             if (data.url) {
               window.location.href = data.url;
             } else {
@@ -290,7 +276,6 @@ function renderUpgradePage(customerId, customer) {
             btn.textContent = 'Subscribe Now — £399';
           }
         }
-
         function logout() {
           fetch('/api/auth/logout', { method: 'POST', credentials: 'include' })
             .then(() => window.location = '/login');
@@ -300,7 +285,6 @@ function renderUpgradePage(customerId, customer) {
     </html>
   `;
 }
-
 // GET /api/dashboard/:customerId
 router.get('/:customerId', async (req, res) => {
   // SECURITY: Verify user can only access their own dashboard
@@ -326,7 +310,6 @@ router.get('/:customerId', async (req, res) => {
       </html>
     `);
   }
-
   try {
     const customerId = requestedCustomerId;
     const selectedBotId = parseInt(req.query.bot) || null;
@@ -343,7 +326,6 @@ router.get('/:customerId', async (req, res) => {
     }
     
     const customer = customerResult.rows[0];
-
     // TRIAL/SUBSCRIPTION GATE
     // Allow admin bypass for viewing customer dashboards
     const isAdminView = req.query.admin === 'true';
@@ -471,7 +453,6 @@ router.get('/:customerId', async (req, res) => {
       email: lead.email,
       date: new Date(lead.created_at).toLocaleDateString()
     }));
-
     // Get recent messages for current bot
     const messagesResult = await query(
       `SELECT m.id, m.role, m.content, m.created_at, l.name as lead_name, l.email as lead_email
@@ -482,7 +463,6 @@ router.get('/:customerId', async (req, res) => {
        LIMIT 100`,
       [botId]
     );
-
     const messages = messagesResult.rows.map(msg => ({
       id: msg.id,
       role: msg.role,
@@ -491,19 +471,16 @@ router.get('/:customerId', async (req, res) => {
       leadEmail: msg.lead_email || '',
       date: new Date(msg.created_at).toLocaleString()
     }));
-
     // Generate bot initials for avatar
     const getBotInitials = (name) => {
       return name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
     };
-
     // Calculate trial/subscription info for dashboard banner
     const subscriptionStatus = customer.subscription_status || 'trial';
     const trialEnd = customer.trial_ends_at ? new Date(customer.trial_ends_at) : null;
     const daysLeft = trialEnd ? Math.ceil((trialEnd - new Date()) / (1000 * 60 * 60 * 24)) : null;
     const showTrialBanner = subscriptionStatus === 'trial' && daysLeft !== null && daysLeft <= 7;
     const isPaid = subscriptionStatus === 'active';
-
     // Render dashboard HTML
     res.send(`
       <!DOCTYPE html>
@@ -515,83 +492,16 @@ router.get('/:customerId', async (req, res) => {
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
         <style>
           * { margin: 0; padding: 0; box-sizing: border-box; }
-          
-          body { 
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #f8fafc;
-            color: #1e293b;
-            display: flex;
-            min-height: 100vh;
-          }
-
-          /* Trial Banner */
-          .trial-banner {
-            background: linear-gradient(135deg, #92400e 0%, #78350f 100%);
-            color: #fef3c7;
-            padding: 10px 20px;
-            font-size: 13px;
-            text-align: center;
-            font-weight: 500;
-          }
-          .trial-banner a {
-            color: #fbbf24;
-            font-weight: 700;
-            text-decoration: underline;
-            margin-left: 8px;
-          }
-          
-          /* Bot Sidebar - Far Left */
-          .bot-sidebar {
-            width: 72px;
-            background: #1e293b;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 16px 0;
-            gap: 12px;
-          }
-          
-          .bot-sidebar-logo {
-            width: 40px;
-            height: 40px;
-            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 700;
-            font-size: 16px;
-            margin-bottom: 20px;
-          }
-          
-          .bot-icon {
-            width: 48px;
-            height: 48px;
-            border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-weight: 600;
-            font-size: 14px;
-            background: #334155;
-            color: #94a3b8;
-            border: 2px solid transparent;
-          }
-          
+          body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; color: #1e293b; display: flex; min-height: 100vh; }
+          .trial-banner { background: linear-gradient(135deg, #92400e 0%, #78350f 100%); color: #fef3c7; padding: 10px 20px; font-size: 13px; text-align: center; font-weight: 500; }
+          .trial-banner a { color: #fbbf24; font-weight: 700; text-decoration: underline; margin-left: 8px; }
+          .bot-sidebar { width: 72px; background: #1e293b; display: flex; flex-direction: column; align-items: center; padding: 16px 0; gap: 12px; }
+          .bot-sidebar-logo { width: 40px; height: 40px; background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%); border-radius: 12px; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 16px; margin-bottom: 20px; }
+          .bot-icon { width: 48px; height: 48px; border-radius: 16px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; font-weight: 600; font-size: 14px; background: #334155; color: #94a3b8; border: 2px solid transparent; }
           .bot-icon:hover { background: #475569; color: white; }
           .bot-icon.active { background: #3b82f6; color: white; border-color: #60a5fa; }
-          
-          .bot-icon-add {
-            background: transparent;
-            border: 2px dashed #475569;
-            color: #64748b;
-          }
+          .bot-icon-add { background: transparent; border: 2px dashed #475569; color: #64748b; }
           .bot-icon-add:hover { border-color: #3b82f6; color: #3b82f6; background: rgba(59, 130, 246, 0.1); }
-          
-          /* Navigation Sidebar */
           .nav-sidebar { width: 240px; background: white; border-right: 1px solid #e2e8f0; display: flex; flex-direction: column; }
           .nav-header { padding: 20px; border-bottom: 1px solid #e2e8f0; }
           .nav-header h2 { font-size: 16px; font-weight: 600; color: #1e293b; margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -610,13 +520,10 @@ router.get('/:customerId', async (req, res) => {
           .user-details { flex: 1; min-width: 0; }
           .user-name { font-size: 14px; font-weight: 500; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
           .user-email { font-size: 12px; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-          
-          /* Main Content */
           .main-content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
           .main-header { background: white; border-bottom: 1px solid #e2e8f0; padding: 16px 32px; display: flex; align-items: center; justify-content: space-between; }
           .main-header h1 { font-size: 20px; font-weight: 600; color: #1e293b; }
           .header-actions { display: flex; align-items: center; gap: 12px; }
-          
           .btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 16px; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.15s; border: none; }
           .btn-primary { background: #3b82f6; color: white; }
           .btn-primary:hover { background: #2563eb; }
@@ -624,9 +531,7 @@ router.get('/:customerId', async (req, res) => {
           .btn-secondary:hover { background: #f8fafc; border-color: #cbd5e1; }
           .btn-danger { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
           .btn-danger:hover { background: #fee2e2; }
-          
           .main-body { flex: 1; overflow-y: auto; padding: 32px; }
-          
           .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-bottom: 32px; }
           .stat-card { background: white; border-radius: 12px; padding: 20px; border: 1px solid #e2e8f0; }
           .stat-card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
@@ -637,37 +542,31 @@ router.get('/:customerId', async (req, res) => {
           .stat-icon.orange { background: #fff7ed; color: #f97316; }
           .stat-value { font-size: 28px; font-weight: 700; color: #1e293b; margin-bottom: 4px; }
           .stat-label { font-size: 13px; color: #64748b; }
-          
           .content-card { background: white; border-radius: 12px; border: 1px solid #e2e8f0; margin-bottom: 24px; }
           .content-card-header { padding: 20px; border-bottom: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between; }
           .content-card-header h3 { font-size: 16px; font-weight: 600; color: #1e293b; }
           .content-card-body { padding: 20px; }
-          
           .form-group { margin-bottom: 20px; }
           .form-label { display: block; font-size: 14px; font-weight: 500; color: #374151; margin-bottom: 6px; }
           .form-input { width: 100%; padding: 10px 14px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; transition: all 0.15s; }
           .form-input:focus { outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
           .form-textarea { min-height: 120px; resize: vertical; }
           .form-help { font-size: 12px; color: #64748b; margin-top: 6px; }
-          
           .upload-area { border: 2px dashed #e2e8f0; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s; }
           .upload-area:hover { border-color: #3b82f6; background: #f8fafc; }
           .upload-icon { width: 48px; height: 48px; background: #eff6ff; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; color: #3b82f6; }
           .upload-title { font-size: 15px; font-weight: 500; color: #1e293b; margin-bottom: 4px; }
           .upload-subtitle { font-size: 13px; color: #64748b; }
-          
           .list-item { display: flex; align-items: center; justify-content: space-between; padding: 16px 0; border-bottom: 1px solid #f1f5f9; }
           .list-item:last-child { border-bottom: none; }
           .list-item-info { flex: 1; min-width: 0; }
           .list-item-title { font-size: 14px; font-weight: 500; color: #1e293b; margin-bottom: 2px; }
           .list-item-meta { font-size: 13px; color: #64748b; }
           .list-item-actions { display: flex; gap: 8px; }
-          
           .badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; }
           .badge-blue { background: #eff6ff; color: #3b82f6; }
           .badge-green { background: #f0fdf4; color: #22c55e; }
           .badge-gray { background: #f1f5f9; color: #64748b; }
-          
           .message-item { padding: 16px; border-radius: 8px; margin-bottom: 12px; }
           .message-item.user { background: #f1f5f9; }
           .message-item.assistant { background: #eff6ff; }
@@ -675,37 +574,30 @@ router.get('/:customerId', async (req, res) => {
           .message-author { font-size: 13px; font-weight: 600; color: #1e293b; }
           .message-time { font-size: 12px; color: #94a3b8; }
           .message-content { font-size: 14px; color: #374151; line-height: 1.6; }
-          
           .embed-section { background: #f8fafc; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
           .embed-section h4 { font-size: 15px; font-weight: 600; color: #1e293b; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
           .embed-section p { font-size: 13px; color: #64748b; margin-bottom: 16px; }
           .code-block { background: #1e293b; border-radius: 8px; padding: 16px; font-family: 'Monaco', 'Menlo', monospace; font-size: 13px; color: #e2e8f0; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
           .copy-row { display: flex; gap: 12px; margin-top: 12px; }
           .copy-input { flex: 1; padding: 12px 16px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: white; }
-          
           .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center; }
           .modal-overlay.show { display: flex; }
           .modal { background: white; border-radius: 16px; padding: 24px; max-width: 440px; width: 90%; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25); }
           .modal h3 { font-size: 18px; font-weight: 600; margin-bottom: 8px; }
           .modal p { font-size: 14px; color: #64748b; margin-bottom: 20px; }
           .modal-actions { display: flex; gap: 12px; justify-content: flex-end; }
-          
           .alert { padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 14px; display: none; }
           .alert-success { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; }
           .alert-error { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
-          
           .tab-panel { display: none; }
           .tab-panel.active { display: block; }
-          
           .toggle-group { display: flex; background: #f1f5f9; border-radius: 8px; padding: 4px; margin-bottom: 16px; }
           .toggle-btn { flex: 1; padding: 8px 16px; border: none; background: transparent; border-radius: 6px; font-size: 14px; font-weight: 500; color: #64748b; cursor: pointer; transition: all 0.15s; }
           .toggle-btn.active { background: white; color: #1e293b; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
-          
           ::-webkit-scrollbar { width: 6px; height: 6px; }
           ::-webkit-scrollbar-track { background: #f1f5f9; }
           ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
           ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-          
           @media (max-width: 1200px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
           @media (max-width: 768px) { .nav-sidebar { display: none; } .stats-grid { grid-template-columns: 1fr; } }
         </style>
@@ -715,16 +607,12 @@ router.get('/:customerId', async (req, res) => {
         <div class="bot-sidebar">
           <div class="bot-sidebar-logo">AC</div>
           ${bots.map(bot => `
-            <div class="bot-icon ${bot.id === botId ? 'active' : ''}" 
-                 onclick="switchBot(${bot.id})" 
-                 title="${bot.name}">
+            <div class="bot-icon ${bot.id === botId ? 'active' : ''}" onclick="switchBot(${bot.id})" title="${bot.name}">
               ${getBotInitials(bot.name)}
             </div>
           `).join('')}
           <div class="bot-icon bot-icon-add" onclick="showCreateBotModal()" title="Create new bot">
-            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-            </svg>
+            <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
           </div>
         </div>
         
@@ -824,13 +712,11 @@ router.get('/:customerId', async (req, res) => {
             <a href="#" onclick="handleUpgrade(); return false;">Subscribe now</a> to keep your chatbots running.
           </div>
           ` : ''}
-
           ${req.query.payment === 'success' ? `
           <div style="background: #f0fdf4; color: #15803d; border-bottom: 1px solid #bbf7d0; padding: 12px 32px; font-size: 14px; font-weight: 500;">
             ✅ Payment successful! Your subscription is now active.
           </div>
           ` : ''}
-
           <div class="main-header">
             <h1 id="pageTitle">Dashboard</h1>
             <div class="header-actions">
@@ -972,7 +858,6 @@ router.get('/:customerId', async (req, res) => {
                   ` : '<p style="color: #64748b; text-align: center; padding: 40px;">No documents yet. Upload content to get started.</p>'}
                 </div>
               </div>
-
               <!-- Retrain Schedule Modal -->
               <div id="retrainModal" style="display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:10000; align-items:center; justify-content:center;">
                 <div style="background:white; border-radius:12px; padding:32px; max-width:440px; width:90%; position:relative; margin:auto; margin-top:15vh;">
@@ -1012,42 +897,6 @@ router.get('/:customerId', async (req, res) => {
                 </div>
               </div>
             </div>
-
-```
-            <!-- Q&A Tab -->
-            <div id="tab-qa" class="tab-panel">
-```
-
----
-
-**CHANGE 2 — Replace handleWebsiteScrape function (~line 1151)**
-
-Find:
-```
-          async function handleWebsiteScrape() { const url = document.getElementById('websiteUrl').value; if (!url) { showError('Please enter a URL'); return; } try { const response = await fetch('/api/content/scrape-website', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, url, mode: websiteMode }) }); const data = await response.json(); if (response.ok) showSuccess(data.message || 'Website scraped!'); else showError(data.error || 'Scraping failed'); } catch (error) { showError('Network error'); } }
-```
-
-Replace with:
-```
-          async function handleWebsiteScrape() { const url = document.getElementById('websiteUrl').value; if (!url) { showError('Please enter a URL'); return; } try { const response = await fetch('/api/content/scrape-website', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, url, mode: websiteMode }) }); const data = await response.json(); if (response.ok) { if (websiteMode === 'full') { const el = document.getElementById('alert-success'); el.textContent = data.message || 'Crawl started! Refresh to see progress.'; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 8000); } else { showSuccess(data.message || 'Website scraped!'); } } else showError(data.error || 'Scraping failed'); } catch (error) { showError('Network error'); } }
-```
-
----
-
-**CHANGE 3 — Add new functions IMMEDIATELY AFTER the handleWebsiteScrape line (~after line 1151)**
-
-Paste these new lines right after `handleWebsiteScrape` and before `handleYoutubeTranscript`:
-```
-          function toggleSelectAll(el) { document.querySelectorAll('.doc-checkbox').forEach(cb => { cb.checked = el.checked; }); updateBulkButtons(); }
-          function updateBulkButtons() { const checked = document.querySelectorAll('.doc-checkbox:checked'); document.getElementById('retrainSelectedBtn').style.display = checked.length > 0 ? 'inline-flex' : 'none'; document.getElementById('deleteSelectedBtn').style.display = checked.length > 0 ? 'inline-flex' : 'none'; }
-          function getSelectedDocIds() { return Array.from(document.querySelectorAll('.doc-checkbox:checked')).map(cb => parseInt(cb.value)); }
-          async function retrainSelected() { const ids = getSelectedDocIds(); if (ids.length === 0) return; if (!confirm('Retrain ' + ids.length + ' selected document(s)? Website pages will be re-scraped with fresh content.')) return; try { const response = await fetch('/api/content/retrain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, documentIds: ids }) }); const data = await response.json(); if (response.ok) { const el = document.getElementById('alert-success'); el.textContent = data.message; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 6000); } else showError(data.error || 'Retrain failed'); } catch (error) { showError('Network error'); } }
-          async function deleteSelected() { const ids = getSelectedDocIds(); if (ids.length === 0) return; if (!confirm('Delete ' + ids.length + ' selected document(s)? This will remove all training data for these pages.')) return; try { const response = await fetch('/api/content/delete-bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, documentIds: ids }) }); const data = await response.json(); if (response.ok) showSuccess(data.message); else showError(data.error || 'Delete failed'); } catch (error) { showError('Network error'); } }
-          function openRetrainSchedule() { document.getElementById('retrainModal').style.display = 'flex'; fetch('/api/content/retrain-schedule/' + botId).then(r => r.json()).then(data => { if (data.success) { document.getElementById('retrainFrequency').value = data.frequency || 'none'; document.getElementById('retrainTime').value = data.time || '03:00'; } }).catch(() => {}); }
-          function closeRetrainModal() { document.getElementById('retrainModal').style.display = 'none'; }
-          async function saveRetrainSchedule() { const frequency = document.getElementById('retrainFrequency').value; const time = document.getElementById('retrainTime').value; try { const response = await fetch('/api/content/retrain-schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, frequency, time }) }); const data = await response.json(); if (response.ok) { closeRetrainModal(); showSuccess(data.message); } else showError(data.error || 'Failed to save'); } catch (error) { showError('Network error'); } }
-
-          async function handleYoutubeTranscript() { ...
             
             <!-- Q&A Tab -->
             <div id="tab-qa" class="tab-panel">
@@ -1245,7 +1094,7 @@ Paste these new lines right after `handleWebsiteScrape` and before `handleYoutub
           function logout() { fetch('/api/auth/logout', { method: 'POST' }).then(() => window.location = '/login'); }
           function setWebsiteMode(mode) { websiteMode = mode; document.getElementById('fullWebsiteBtn').classList.toggle('active', mode === 'full'); document.getElementById('singlePageBtn').classList.toggle('active', mode === 'single'); }
           function copyToClipboard(text) { navigator.clipboard.writeText(text).then(() => alert('Copied!')).catch(() => alert('Failed to copy')); }
-          function copyEmbed(type) { let text = ''; if (type === 'script') { text = \`<script defer src="https://autoreplychat.com/embed.js" data-bot-id="\${publicId}"><\\/script>\`; } else if (type === 'iframe') { text = \`<iframe src="https://autoreplychat.com/chat/\${publicId}" style="width: 400px; height: 600px; border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"></iframe>\`; } navigator.clipboard.writeText(text).then(() => alert('Code copied!')).catch(() => alert('Failed to copy')); }
+          function copyEmbed(type) { let text = ''; if (type === 'script') { text = `<script defer src="https://autoreplychat.com/embed.js" data-bot-id="${publicId}"><\/script>`; } else if (type === 'iframe') { text = `<iframe src="https://autoreplychat.com/chat/${publicId}" style="width: 400px; height: 600px; border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.15);"></iframe>`; } navigator.clipboard.writeText(text).then(() => alert('Code copied!')).catch(() => alert('Failed to copy')); }
           
           async function handleUpgrade() { try { const response = await fetch('/api/stripe/create-checkout', { method: 'POST', headers: { 'Content-Type': 'application/json' } }); const data = await response.json(); if (data.url) window.location.href = data.url; } catch (error) { showError('Failed to start checkout'); } }
           async function openBillingPortal() { try { const response = await fetch('/api/stripe/create-portal', { method: 'POST', headers: { 'Content-Type': 'application/json' } }); const data = await response.json(); if (data.url) window.location.href = data.url; } catch (error) { showError('Failed to open billing portal'); } }
@@ -1253,7 +1102,15 @@ Paste these new lines right after `handleWebsiteScrape` and before `handleYoutub
           async function createBot() { const name = document.getElementById('newBotName').value.trim(); if (!name) { showError('Please enter a bot name'); return; } try { const response = await fetch('/api/bots', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, name }) }); const data = await response.json(); if (response.ok) window.location.href = '/api/dashboard/${customerId}?bot=' + data.botId; else showError(data.error || 'Failed to create bot'); } catch (error) { showError('Network error'); } }
           async function deleteBot() { try { const response = await fetch('/api/bots/' + botId, { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId }) }); if (response.ok) window.location.href = '/api/dashboard/${customerId}'; else { const data = await response.json(); showError(data.error || 'Failed to delete bot'); } } catch (error) { showError('Network error'); } }
           async function handleFileUpload(event) { const files = event.target.files; const formData = new FormData(); for (let file of files) formData.append('files', file); formData.append('customerId', customerId); formData.append('botId', botId); try { const response = await fetch('/api/content/upload', { method: 'POST', body: formData }); const data = await response.json(); if (response.ok) showSuccess(data.message || 'Files uploaded!'); else showError(data.error || 'Upload failed'); } catch (error) { showError('Network error'); } }
-          async function handleWebsiteScrape() { const url = document.getElementById('websiteUrl').value; if (!url) { showError('Please enter a URL'); return; } try { const response = await fetch('/api/content/scrape-website', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, url, mode: websiteMode }) }); const data = await response.json(); if (response.ok) showSuccess(data.message || 'Website scraped!'); else showError(data.error || 'Scraping failed'); } catch (error) { showError('Network error'); } }
+          async function handleWebsiteScrape() { const url = document.getElementById('websiteUrl').value; if (!url) { showError('Please enter a URL'); return; } try { const response = await fetch('/api/content/scrape-website', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, url, mode: websiteMode }) }); const data = await response.json(); if (response.ok) { if (websiteMode === 'full') { const el = document.getElementById('alert-success'); el.textContent = data.message || 'Crawl started! Refresh to see progress.'; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 8000); } else { showSuccess(data.message || 'Website scraped!'); } } else showError(data.error || 'Scraping failed'); } catch (error) { showError('Network error'); } }
+          function toggleSelectAll(el) { document.querySelectorAll('.doc-checkbox').forEach(cb => { cb.checked = el.checked; }); updateBulkButtons(); }
+          function updateBulkButtons() { const checked = document.querySelectorAll('.doc-checkbox:checked'); document.getElementById('retrainSelectedBtn').style.display = checked.length > 0 ? 'inline-flex' : 'none'; document.getElementById('deleteSelectedBtn').style.display = checked.length > 0 ? 'inline-flex' : 'none'; }
+          function getSelectedDocIds() { return Array.from(document.querySelectorAll('.doc-checkbox:checked')).map(cb => parseInt(cb.value)); }
+          async function retrainSelected() { const ids = getSelectedDocIds(); if (ids.length === 0) return; if (!confirm('Retrain ' + ids.length + ' selected document(s)? Website pages will be re-scraped with fresh content.')) return; try { const response = await fetch('/api/content/retrain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, documentIds: ids }) }); const data = await response.json(); if (response.ok) { const el = document.getElementById('alert-success'); el.textContent = data.message; el.style.display = 'block'; setTimeout(() => el.style.display = 'none', 6000); } else showError(data.error || 'Retrain failed'); } catch (error) { showError('Network error'); } }
+          async function deleteSelected() { const ids = getSelectedDocIds(); if (ids.length === 0) return; if (!confirm('Delete ' + ids.length + ' selected document(s)? This will remove all training data for these pages.')) return; try { const response = await fetch('/api/content/delete-bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, documentIds: ids }) }); const data = await response.json(); if (response.ok) showSuccess(data.message); else showError(data.error || 'Delete failed'); } catch (error) { showError('Network error'); } }
+          function openRetrainSchedule() { document.getElementById('retrainModal').style.display = 'flex'; fetch('/api/content/retrain-schedule/' + botId).then(r => r.json()).then(data => { if (data.success) { document.getElementById('retrainFrequency').value = data.frequency || 'none'; document.getElementById('retrainTime').value = data.time || '03:00'; } }).catch(() => {}); }
+          function closeRetrainModal() { document.getElementById('retrainModal').style.display = 'none'; }
+          async function saveRetrainSchedule() { const frequency = document.getElementById('retrainFrequency').value; const time = document.getElementById('retrainTime').value; try { const response = await fetch('/api/content/retrain-schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, frequency, time }) }); const data = await response.json(); if (response.ok) { closeRetrainModal(); showSuccess(data.message); } else showError(data.error || 'Failed to save'); } catch (error) { showError('Network error'); } }
           async function handleYoutubeTranscript() { const url = document.getElementById('youtubeUrl').value; if (!url) { showError('Please enter a YouTube URL'); return; } try { const response = await fetch('/api/content/youtube', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, url }) }); const data = await response.json(); if (response.ok) showSuccess(data.message || 'Transcript extracted!'); else showError(data.error || 'Extraction failed'); } catch (error) { showError('Network error'); } }
           async function handleTextUpload() { const title = document.getElementById('textTitle').value; const content = document.getElementById('textContent').value; if (!title || !content) { showError('Please fill in title and content'); return; } try { const response = await fetch('/api/content/text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, title, content }) }); const data = await response.json(); if (response.ok) { showSuccess(data.message || 'Text uploaded!'); document.getElementById('textTitle').value = ''; document.getElementById('textContent').value = ''; } else showError(data.error || 'Upload failed'); } catch (error) { showError('Network error'); } }
           async function handleQAUpload() { const question = document.getElementById('qaQuestion').value; const answer = document.getElementById('qaAnswer').value; if (!question || !answer) { showError('Please fill in question and answer'); return; } const content = 'Q: ' + question + '\\n\\nA: ' + answer; const title = 'Q&A: ' + question.substring(0, 50) + (question.length > 50 ? '...' : ''); try { const response = await fetch('/api/content/text', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ customerId, botId, title, content }) }); const data = await response.json(); if (response.ok) { showSuccess('Q&A pair added!'); document.getElementById('qaQuestion').value = ''; document.getElementById('qaAnswer').value = ''; } else showError(data.error || 'Failed to add'); } catch (error) { showError('Network error'); } }
@@ -1291,5 +1148,4 @@ Paste these new lines right after `handleWebsiteScrape` and before `handleYoutub
     res.status(500).send('Internal server error');
   }
 });
-
 export default router;
