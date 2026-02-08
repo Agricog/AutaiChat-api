@@ -8,6 +8,8 @@ const router = express.Router();
 const anthropic = new Anthropic();
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+const TRIAL_MESSAGE_LIMIT = 50;
+
 // POST /api/chat - Main chat endpoint
 router.post('/', async (req, res) => {
   try {
@@ -60,6 +62,25 @@ router.post('/', async (req, res) => {
     const actualBotId = botConfig.id;
     const actualCustomerId = botConfig.customer_id;
     const botInstructions = botConfig.bot_instructions || 'You are a helpful assistant.';
+
+    // Check trial message limit
+    const customerResult = await query(
+      'SELECT subscription_status FROM customers WHERE id = $1',
+      [actualCustomerId]
+    );
+
+    if (customerResult.rows.length > 0 && customerResult.rows[0].subscription_status === 'trial') {
+      const messageCount = await query(
+        'SELECT COUNT(*) as count FROM messages WHERE bot_id = $1 AND role = $2',
+        [actualBotId, 'user']
+      );
+
+      if (parseInt(messageCount.rows[0].count) >= TRIAL_MESSAGE_LIMIT) {
+        return res.json({
+          message: 'This chatbot has reached its trial message limit. Please contact us to upgrade and continue using this service.'
+        });
+      }
+    }
 
     // Create or update chat session
     if (sessionId) {
