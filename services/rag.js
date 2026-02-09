@@ -110,8 +110,9 @@ export async function storeDocument({ customerId, botId, title, contentType, sou
 
 /**
  * Retrieve relevant context chunks using pgvector cosine similarity
+ * Returns chunks with their source document title for accurate attribution
  */
-export async function retrieveContext(customerId, userQuery, limit = 5, botId = null) {
+export async function retrieveContext(customerId, userQuery, limit = 8, botId = null) {
   try {
     // Generate embedding for the user's query
     const queryEmbedding = await generateEmbedding(userQuery);
@@ -122,24 +123,26 @@ export async function retrieveContext(customerId, userQuery, limit = 5, botId = 
     let result;
 
     if (botId) {
-      // Bot-specific vector similarity search
+      // Bot-specific vector similarity search with document title
       result = await query(
-        `SELECT chunk_text, 1 - (embedding <=> $1::vector) AS similarity
-         FROM embeddings
-         WHERE bot_id = $2
-           AND embedding IS NOT NULL
-         ORDER BY embedding <=> $1::vector
+        `SELECT e.chunk_text, d.title AS doc_title, 1 - (e.embedding <=> $1::vector) AS similarity
+         FROM embeddings e
+         LEFT JOIN documents d ON d.id = e.document_id
+         WHERE e.bot_id = $2
+           AND e.embedding IS NOT NULL
+         ORDER BY e.embedding <=> $1::vector
          LIMIT $3`,
         [embeddingStr, botId, limit]
       );
     } else {
-      // Fallback: customer-level search
+      // Fallback: customer-level search with document title
       result = await query(
-        `SELECT chunk_text, 1 - (embedding <=> $1::vector) AS similarity
-         FROM embeddings
-         WHERE customer_id = $1
-           AND embedding IS NOT NULL
-         ORDER BY embedding <=> $2::vector
+        `SELECT e.chunk_text, d.title AS doc_title, 1 - (e.embedding <=> $1::vector) AS similarity
+         FROM embeddings e
+         LEFT JOIN documents d ON d.id = e.document_id
+         WHERE e.customer_id = $2
+           AND e.embedding IS NOT NULL
+         ORDER BY e.embedding <=> $1::vector
          LIMIT $3`,
         [embeddingStr, customerId, limit]
       );
@@ -154,7 +157,12 @@ export async function retrieveContext(customerId, userQuery, limit = 5, botId = 
     }
 
     console.log(`Found ${relevant.length} relevant chunks (best similarity: ${relevant[0].similarity.toFixed(3)})`);
-    return relevant.map(row => row.chunk_text);
+
+    // Format chunks with their source document title so the AI knows which document each chunk is from
+    return relevant.map(row => {
+      const source = row.doc_title ? `[Source: ${row.doc_title}]` : '';
+      return `${source}\n${row.chunk_text}`;
+    });
   } catch (error) {
     console.error('Error retrieving context:', error);
     return [];
