@@ -103,7 +103,7 @@ router.post('/', async (req, res) => {
     }
 
     // Retrieve context from RAG
-    const context = await retrieveContext(actualCustomerId, message, 5, actualBotId);
+    const context = await retrieveContext(actualCustomerId, message, 8, actualBotId);
 
     // Build system prompt with source-attributed context
     let systemPrompt = botInstructions;
